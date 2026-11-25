@@ -40,8 +40,8 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 
 ## Rules
 
-- Falling into the clouds kills you. You respawn on the **spawn island** after 5 seconds. Spawn is a safe zone: nobody can hurt you there, you can't hurt anyone from there, and you heal there. Its blue light beam is visible from far away.
-- Coins come from pickups (2 each), killing enemies (15) and killing players (25). Your coins and upgrades are saved in your browser.
+- Falling into the clouds kills you. You respawn on the **spawn island** after 5 seconds. Spawn is a safe zone: nobody can hurt you there, you can't hurt anyone from there, and you heal quickly there. Everywhere else your health regenerates slowly once you go 4 seconds without taking damage. Its blue light beam is visible from far away.
+- Coins come from pickups (2 each), killing enemies (30) and killing players (50). Your coins and upgrades are saved in your browser.
 - Shops only appear on big islands. The arrow at the top of the screen points to the nearest one. They sell 7 upgrades with 5 levels each: range, hook speed, pull power, climb boost, damage, max health and sprint speed.
 
 ## Abilities (shop, buy once)

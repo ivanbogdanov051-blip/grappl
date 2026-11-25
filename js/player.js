@@ -154,6 +154,7 @@ export class Player {
     if (inSafeZone(this.pos)) { g.ui.toast('🛡️ Safe zone protected you'); return; }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
     this.hp -= hit.dmg || 0;
+    this.lastHurt = g.time;
     g.hurtFlash(); g.shake(0.5); g.sfx.hurt();
     if (hit.mode === 'pull' || hit.mode === 'yank') {
       _a.fromArray(hit.a);
@@ -223,7 +224,11 @@ export class Player {
     wallClimb(this, s.climbReach, s.climbSpeed);
     this.updateHook(dt);
     this.safe = inSafeZone(this.pos);
-    if (this.safe && this.hp < s.health) this.hp = Math.min(s.health, this.hp + 15 * dt);
+    if (this.hp < s.health) {
+      const calm = g.time - (this.lastHurt || -99) > 4;
+      const rate = this.safe ? 15 : calm ? 6 : 0;
+      this.hp = Math.min(s.health, this.hp + rate * dt);
+    }
     const c = g.world.collectCoins(this.pos);
     if (c) g.addCoins(c * 2, true);
     if (this.pos.y < KILL_Y) this.die('You fell into the clouds!');

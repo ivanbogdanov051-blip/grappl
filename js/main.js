@@ -346,7 +346,7 @@ class Game {
     const mine = m.killer === this.player.id;
     this.ui.feed(`${m.kname} ⚔ ${m.vname}`, mine ? 'me' : m.vkind === 'player' ? 'pk' : '');
     if (mine) {
-      const reward = m.vkind === 'player' ? 25 : 15;
+      const reward = m.vkind === 'player' ? 50 : 30;
       this.addCoins(reward);
       this.sfx.kill();
       this.ui.toast(`+${reward} 🪙  ${m.vkind === 'player' ? 'Player' : 'Grappler'} eliminated!`);
@@ -678,6 +678,7 @@ if (location.search.includes("autotest")) {
       ab.rewindBackNear = Math.round(p.pos.distanceTo(safeSpot));
       ab.buttons = document.querySelectorAll('#abilities .ab').length;
       log.abilities = ab;
+      p.hp = 40; p.lastHurt = game.time; sim(3); const r1 = Math.round(p.hp); sim(3); log.regen = { after3s: r1, after6s: Math.round(p.hp) };
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);
