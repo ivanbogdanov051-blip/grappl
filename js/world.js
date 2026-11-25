@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rng, hash2, fbm, vnoise, smoothstep, clamp } from './noise.js';
 import { makeCharacter, makeTextSprite } from './models.js';
 
-export const CHUNK = 300;
+export const CHUNK = 240;
 export const SEED = 424242;
 export const SPAWN = new THREE.Vector3(0, 40, 0);
 export const SAFE_RADIUS = 72;
@@ -287,32 +287,32 @@ function genChunk(cx, cz) {
   if (cx === 0 && cz === 0) {
     mk(0, SPAWN.y, 0, 56, { flat: true, noLake: true, round: true, kind: 'spawn' });
     for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * TAU + r() * 0.4, d = 92 + r() * 45;
+      const a = (i / 6) * TAU + r() * 0.4, d = 78 + r() * 25;
       mk(Math.cos(a) * d, SPAWN.y - 15 + r() * 45, Math.sin(a) * d, 4 + r() * 6, { noLake: true, kind: 'rock' });
     }
   } else {
     const roll = r();
     if (roll < 0.2) {
-      const R = 70 + r() * 50;
+      const R = 62 + r() * 33;
       const m = Math.max(0, CHUNK / 2 - R * 1.22);
-      mk(ox + (r() * 2 - 1) * m, baseH + (r() - 0.5) * 70, oz + (r() * 2 - 1) * m, R, {});
+      mk(ox + (r() * 2 - 1) * m, baseH + (r() - 0.5) * 50, oz + (r() * 2 - 1) * m, R, {});
     } else {
-      const count = roll < 0.32 ? 0 : roll < 0.66 ? 1 : roll < 0.9 ? 2 : 3;
+      const count = roll < 0.45 ? 2 : roll < 0.78 ? 3 : 4;
       const slots = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
       for (let i = 3; i > 0; i--) {
         const j = Math.floor(r() * (i + 1));
         const t = slots[i]; slots[i] = slots[j]; slots[j] = t;
       }
       for (let i = 0; i < count; i++) {
-        const R = r() < 0.28 ? 38 + r() * 22 : 12 + r() * 24;
+        const R = r() < 0.28 ? 32 + r() * 16 : 11 + r() * 18;
         const q = CHUNK / 4, m = Math.max(0, q - R * 1.22);
-        mk(ox + slots[i][0] * q + (r() * 2 - 1) * m, baseH + (r() - 0.5) * 120, oz + slots[i][1] * q + (r() * 2 - 1) * m, R, {});
+        mk(ox + slots[i][0] * q + (r() * 2 - 1) * m, baseH + (r() - 0.5) * 80, oz + slots[i][1] * q + (r() * 2 - 1) * m, R, {});
       }
     }
-    const rocks = 3 + Math.floor(r() * 5);
+    const rocks = 4 + Math.floor(r() * 5);
     for (let i = 0; i < rocks; i++) {
       const x = ox + (r() - 0.5) * CHUNK * 0.9, z = oz + (r() - 0.5) * CHUNK * 0.9;
-      const y = baseH + (r() - 0.5) * 150, R = 3 + r() * 6;
+      const y = baseH + (r() - 0.5) * 100, R = 3 + r() * 6;
       let ok = true;
       for (const I of list) {
         if (Math.hypot(x - I.x, z - I.z) < I.maxR + R * 1.3 + 4 && y < I.y + 25 && y > I.yBot - 15) { ok = false; break; }

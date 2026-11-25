@@ -54,7 +54,7 @@ class Game {
     r.autoClear = false;
     this.scene = new THREE.Scene();
     this.fogColor = 0xbcd4ec;
-    const loadR = hi ? 4 : 3;
+    const loadR = hi ? 5 : 4;
     this.viewDist = loadR * CHUNK;
     this.scene.fog = new THREE.Fog(this.fogColor, this.viewDist * 0.28, this.viewDist * 0.95);
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 5000);
@@ -583,8 +583,9 @@ if (location.search.includes("autotest")) {
       aim(tgt);
       p.shoot(); const s1 = p.hook.state;
       sim(1.2); const s2 = p.hook.state; const anchor = p.hook.anchor.toArray().map(Math.round);
-      p.shoot(); const s3 = p.hook.state;
-      sim(4);
+      const from0 = p.pos.toArray().map(Math.round); p.shoot(); const s3 = p.hook.state; const vel0 = p.vel.toArray().map(Math.round);
+      const tr = []; for (let k = 0; k < 20; k++) { sim(0.1); tr.push([...p.pos.toArray().map((v) => Math.round(v * 10) / 10), p.braking ? 1 : 0, p.hitWall ? 1 : 0, p.onGround ? 1 : 0]); }
+      log.trace = { from0, vel0, tr };
       log.grapple = { target: tgt.toArray().map(Math.round), states: [s1, s2, s3], anchor, landed: p.pos.toArray().map(Math.round), onGround: p.onGround, onTarget: p.ground === isl, kind: isl.kind, R: Math.round(isl.R) };
     } else log.grapple = "no visible island";
     // hook an enemy and yank it

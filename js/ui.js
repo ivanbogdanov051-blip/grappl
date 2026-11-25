@@ -18,6 +18,12 @@ export class UI {
       if (code.length < 3) { this.menuStatus('Type the room code your friend gave you'); return; }
       game.start('join', code);
     };
+    if (window.SKY_NO_ONLINE) {
+      for (const id of ['playPublic', 'createRoom', 'joinRoom']) $(id).closest('.row, button').classList.add('hidden');
+      $('playPublic').classList.add('hidden');
+      $('createRoom').classList.add('hidden');
+      this.menuStatus('Online play is off in this preview. Host the game folder to play with friends.');
+    }
     const qs = new URLSearchParams(location.search).get('room');
     if (qs) $('roomInput').value = qs.toUpperCase();
     $('shopClose').onclick = () => game.closeShop();

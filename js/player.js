@@ -68,7 +68,7 @@ export class Player {
       g.recoil = 1;
     } else if (h.state === HOOK.ATTACHED) {
       _a.copy(this.pos); _a.y += 0.7;
-      launchTo(this, _a, h.anchor, s.pull, s.climbUp, true);
+      launchTo(this, _a, h.anchor, s.pull, s.climbUp, true, 1.6);
       this.climbT = 1.5;
       h.state = HOOK.IDLE;
       g.sfx.zip();

@@ -249,7 +249,7 @@ export class Enemy {
       h.t += dt;
       if (h.t > 0.15) {
         _a.copy(this.pos); _a.y += 0.7;
-        launchTo(this, _a, h.anchor, 40, 5, true);
+        launchTo(this, _a, h.anchor, 40, 5, true, 1.6);
         this.climbT = 1.4;
         h.state = HOOK.IDLE;
         this.moveTarget = null;

@@ -13,7 +13,11 @@ export function launchVelocity(from, to, speed, extraUp, out = new THREE.Vector3
 
 // Launch an entity toward a point. With `brake`, it slows down hard when it arrives
 // (so a pull lands you at the hook point instead of flinging you past it).
-export function launchTo(e, from, to, speed, extraUp, brake) {
+export function launchTo(e, from, to, speed, extraUp, brake, inset = 0) {
+  if (inset) {
+    const dx = to.x - from.x, dz = to.z - from.z, l = Math.hypot(dx, dz);
+    if (l > 0.1) to = new THREE.Vector3(to.x + (dx / l) * inset, to.y + 0.3, to.z + (dz / l) * inset);
+  }
   launchVelocity(from, to, speed, extraUp, e.vel);
   e.onGround = false;
   e.pos.y += 0.05;
@@ -34,8 +38,9 @@ function checkBrake(e, dt) {
   if (dx * dx + dy * dy + dz * dz < 3.5 * 3.5 || passed || b.t <= 0) {
     e.braking = false;
     if (b.t > 0) {
-      e.vel.x *= 0.22; e.vel.z *= 0.22;
+      e.vel.x *= 0.12; e.vel.z *= 0.12;
       if (e.vel.y < 0) e.vel.y *= 0.4;
+      else if (e.vel.y > 6 && !e.hitWall) e.vel.y = 6;
     }
   }
 }
