@@ -263,6 +263,32 @@ class Game {
     if (c.distanceTo(this.player.pos) < 60) this.shake(0.7);
     this.sfx.near('thunk', c); this.sfx.near('hurt', c);
   }
+  explode(at, p) {
+    const hit = (ent) => {
+      if (ent.dead) return;
+      const sc = ent.scale || 1;
+      const dx = ent.pos.x - at.x, dy = ent.pos.y + 0.7 * sc - at.y, dz = ent.pos.z - at.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 9) return;
+      const l = Math.hypot(dx, dz) || 1;
+      const k = 0.8 + 1.8 * (1 - d / 9);
+      if (ent === p) { // rocket jump: knockback but no self damage
+        p.vel.x += (dx / l) * 9 * k; p.vel.z += (dz / l) * 9 * k; p.vel.y = Math.max(p.vel.y, 0) + 11 * k;
+        p.onGround = false; p.braking = false; p.pos.y += 0.05;
+        return;
+      }
+      this.deliverHit(ent.id, { mode: 'bump', dmg: Math.round(15 + 25 * (1 - d / 9)), d: [dx / l, 0, dz / l], k, attacker: p.id, aname: this.name });
+    };
+    hit(p);
+    for (const e of this.enemies) hit(e);
+    for (const r of this.remotes.values()) hit(r);
+    this.particles.burst(at, 0xffb020, 34, 16, 0.45);
+    this.particles.burst(at, 0xff4a1a, 22, 11, 0.35);
+    this.particles.burst(at, 0x3a3a3a, 18, 7, 0.5);
+    const dp = at.distanceTo(p.pos);
+    if (dp < 40) this.shake(0.8 * (1 - dp / 40) + 0.2);
+    this.sfx.thunk(); this.sfx.hurt(); this.sfx.hit();
+  }
   shockwave(p) {
     const c = p.pos;
     const hit = (ent) => {
@@ -617,6 +643,18 @@ class Game {
   }
 }
 
+// installable app (not inside the Claude preview)
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.SKY_NO_ONLINE) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  let deferred = null;
+  const btn = document.getElementById('installBtn');
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; btn.classList.remove('hidden'); });
+  btn.onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice.catch(() => {}); deferred = null; btn.classList.add('hidden'); };
+  addEventListener('appinstalled', () => btn.classList.add('hidden'));
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone;
+  if (ios) document.getElementById('iosHint').classList.remove('hidden');
+}
+
 const game = new Game();
 window.game = game;
 window.Enemy = Enemy;
@@ -746,6 +784,51 @@ if (location.search.includes("autotest")) {
       log.remoteTitan = rt ? [rt.name, rt.scale, rt.maxHp] : null;
       game.removeOwner('fakepeer');
       p.hp = 100;
+    }
+    // new abilities
+    {
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      game.spawnTimer = 999;
+      const c4 = game.world.spawnCandidates(p.pos, 100, 900).sort((a, b) => b.R - a.R)[0];
+      let st4 = null;
+      for (let t = 0.1; t < 0.8; t += 0.05) { const q = c4.pointAt(2.5, t); q.y += 0.5; if (!game.world.raycast(q, new THREE.Vector3(0, 1, 0), 60)) { st4 = q; break; } }
+      st4 = st4 || c4.pointAt(2.5, 0.3);
+      const reset = () => { p.dead = false; p.hp = 100; p.pos.copy(st4); p.vel.set(0, 0, 0); p.cd = {}; sim(0.4); };
+      const n = {};
+      for (const k of ['magnet', 'shield', 'glide', 'bomb', 'heal']) game.save.abil[k] = true;
+      game.ui.renderAbilities();
+      n.buttons = document.querySelectorAll('#abilities .ab').length;
+      // magnet: enemy 25 m away gets pulled to us
+      reset();
+      const en = new Enemy(game, p.pos.clone().add(new THREE.Vector3(0, 1, -25))); en.think = 999; en.cool = 999; game.enemies.push(en); sim(0.5);
+      const d0 = en.pos.distanceTo(p.pos); p.useAbility('magnet'); sim(1.6);
+      n.magnet = { before: Math.round(d0), after: Math.round(en.pos.distanceTo(p.pos)), dmg: 60 - en.hp };
+      // shield: a hit while shielded does nothing
+      reset(); p.useAbility('shield');
+      p.applyHit({ mode: 'bump', dmg: 30, d: [1, 0, 0], attacker: 'x', aname: 'Test' });
+      n.shield = { hpWhileShielded: p.hp }; sim(4.2);
+      p.applyHit({ mode: 'bump', dmg: 30, d: [1, 0, 0], attacker: 'x', aname: 'Test' }); n.shield.hpAfterExpiry = p.hp;
+      // glide: fall speed limited
+      reset(); p.pos.y += 60; p.vel.set(0, 0, 0); sim(0.05); p.useAbility('glide'); sim(1.5);
+      n.glideFallSpeed = Math.round(p.vel.y * 10) / 10;
+      // bomb: enemy 20 m away, aim at it
+      reset();
+      en.pos.copy(p.pos).add(new THREE.Vector3(0, 0.3, -20)); en.vel.set(0, 0, 0); en.hp = 60; sim(0.4);
+      const ec = en.pos.clone(); ec.y += 0.7; aim(ec);
+      p.useAbility('bomb'); sim(0.4);
+      n.bomb = { enemyDmg: 60 - en.hp, enemySpeed: Math.round(en.vel.length()) };
+      // rocket jump: bomb at own feet
+      reset(); p.pitch = -1.45; p.useAbility('bomb'); sim(0.15); n.rocketJumpVy = Math.round(p.vel.y); n.selfDmg = 100 - p.hp; sim(3);
+      // heal
+      reset(); p.hp = 30; p.useAbility('heal'); n.heal = p.hp;
+      // remote player glow: see-through material
+      game.onNet({ t: 's', p: { id: 'glowpeer', n: 'Glowy', x: st4.x + 10, y: st4.y, z: st4.z, vx: 0, vy: 0, vz: 0, yw: 0, pt: 0, hp: 100, mh: 100, d: 0, hs: 0, hx: 0, hy: 0, hz: 0 }, e: [] });
+      const gp = game.remotes.get('glowpeer');
+      let glow = false; gp.model.group.traverse((o) => { if (o.isMesh && o.material.depthTest === false && o.material.blending === THREE.AdditiveBlending) glow = true; });
+      n.glow = glow;
+      n.tagThroughWalls = gp.model.tag.material.depthTest === false;
+      game.removeOwner('glowpeer');
+      log.newAbilities = n;
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);

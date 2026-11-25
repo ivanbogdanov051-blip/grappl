@@ -15,7 +15,7 @@ export class Remote {
     const T = (this.T = isP ? null : ENEMY_TYPES[type] || ENEMY_TYPES.grappler);
     this.scale = T ? T.scale : 1;
     if (T) this.name = T.name;
-    this.model = makeCharacter(isP ? 0x2fd05a : T.color, { name: isP ? name : T.boss ? T.name : null, hp: true, angry: !isP, crown: !!(T && T.boss), hpColor: isP ? 0x6dff7a : 0xff4040, tagColor: isP ? '#fff' : '#ffd0d0' });
+    this.model = makeCharacter(isP ? 0x2fd05a : T.color, { name: isP ? name : T.boss ? T.name : null, hp: true, angry: !isP, crown: !!(T && T.boss), glow: isP ? 0x3dff6a : null, hpColor: isP ? 0x6dff7a : 0xff4040, tagColor: isP ? '#fff' : '#ffd0d0' });
     this.model.group.scale.setScalar(this.scale);
     game.scene.add(this.model.group);
     this.rope = new Rope(isP ? 0x1d4d24 : 0x7a1a1a, 0.035);

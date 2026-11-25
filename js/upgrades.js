@@ -33,5 +33,10 @@ export const ABILITIES = [
   { key: 'dash', icon: '💨', name: 'Dash', cost: 25, cd: 4, desc: 'Instant burst of speed where you look. Great for saving a fall.' },
   { key: 'shock', icon: '💥', name: 'Shockwave', cost: 45, cd: 9, desc: 'Blast everyone within 14 m away from you (20 dmg). Knock them off the island!' },
   { key: 'rewind', icon: '⏪', name: 'Rewind', cost: 50, cd: 15, desc: 'Teleport back to where you were 3 seconds ago. Undo a bad fall.' },
+  { key: 'magnet', icon: '🧲', name: 'Magnet', cost: 40, cd: 8, desc: 'Yank every enemy and player within 35 m straight to you (10 dmg).' },
+  { key: 'shield', icon: '🛡️', name: 'Shield', cost: 45, cd: 14, desc: 'Block every hit, hook and knockback for 4 seconds.' },
+  { key: 'glide', icon: '🪂', name: 'Glide', cost: 30, cd: 12, desc: 'Fall slowly and steer freely through the air for 6 seconds.' },
+  { key: 'bomb', icon: '💣', name: 'Hook Bomb', cost: 55, cd: 7, desc: 'Fire an exploding hook: up to 40 dmg and big knockback in 9 m. Blast yourself for a rocket jump!' },
+  { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
 ];
 export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));

@@ -138,3 +138,12 @@ body.touch .ab { width: 48px; height: 48px; }
 #bossName { font-weight: 900; font-size: 14px; letter-spacing: 2px; color: #ffd27a; }
 #bossBar .bb { height: 14px; margin-top: 3px; background: rgba(0,0,0,0.5); border: 2px solid rgba(255,210,122,0.7); border-radius: 8px; overflow: hidden; }
 #bossFill { height: 100%; width: 100%; background: linear-gradient(90deg, #8f1414, #ff4b2b); transition: width 0.2s; }
+
+#shieldFx { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.2s; box-shadow: inset 0 0 90px 20px rgba(90,200,255,0.55); }
+#abilities { max-width: 96vw; flex-wrap: wrap; justify-content: center; }
+body.touch #abilities { width: 252px; justify-content: flex-end; gap: 5px; }
+body.touch .ab { width: 46px; height: 46px; }
+body.touch .ab .ai { font-size: 20px; line-height: 42px; }
+
+#installBtn { background: linear-gradient(180deg, #2fbf71, #1f8f52); border-color: #7ff0b0; }
+#iosHint { font-size: 13px; text-align: center; opacity: 0.9; }

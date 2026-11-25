@@ -182,6 +182,21 @@ export function makeCharacter(color, o = {}) {
   gun.group.position.set(0.85, 0.55, -0.25);
   bodyG.add(gun.group);
 
+  let glow = null;
+  if (o.glow) {
+    const gm = new THREE.MeshBasicMaterial({ color: o.glow, transparent: true, opacity: 0.4, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    glow = new THREE.Mesh(boxGeo, gm);
+    glow.scale.setScalar(1.62);
+    glow.position.y = 0.7;
+    glow.renderOrder = 20;
+    bodyG.add(glow);
+    const core = new THREE.Mesh(boxGeo, new THREE.MeshBasicMaterial({ color: o.glow, transparent: true, opacity: 0.45, depthTest: false, depthWrite: false, fog: false }));
+    core.scale.setScalar(1.42);
+    core.position.y = 0.7;
+    core.renderOrder = 19;
+    bodyG.add(core);
+    glow.userData.core = core;
+  }
   let hp = null;
   if (o.hp) {
     const hg = new THREE.Group();
@@ -197,8 +212,9 @@ export function makeCharacter(color, o = {}) {
   }
   let tag = null;
   if (o.name) {
-    tag = makeTextSprite(o.name, { color: o.tagColor || '#fff' });
+    tag = makeTextSprite(o.name, { color: o.tagColor || '#fff', size: o.glow ? 0.65 : 0.45 });
     tag.position.y = 2.25;
+    if (o.glow) { tag.material.depthTest = false; tag.material.fog = false; tag.renderOrder = 21; }
     g.add(tag);
   }
 
@@ -213,8 +229,9 @@ export function makeCharacter(color, o = {}) {
     },
     setName(name) {
       if (!tag) return;
-      const n = makeTextSprite(name, { color: o.tagColor || '#fff' });
+      const n = makeTextSprite(name, { color: o.tagColor || '#fff', size: o.glow ? 0.65 : 0.45 });
       tag.material.map.dispose(); tag.material.dispose();
+      if (o.glow) { n.material.depthTest = false; n.material.fog = false; }
       tag.material = n.material; tag.scale.copy(n.scale);
     },
     hit() { this.flash = 1; },
@@ -233,12 +250,14 @@ export function makeCharacter(color, o = {}) {
         this.flash -= dt * 4;
         mat.emissive.setRGB(Math.max(0, this.flash) * 0.9, Math.max(0, this.flash) * 0.1, 0);
       }
+      if (glow) { const pulse = 0.5 + Math.sin(this.t * 4) * 0.15; glow.material.opacity = pulse; }
       if (hp && cam) hp.group.quaternion.copy(g.quaternion).invert().multiply(cam.quaternion);
     },
     dispose() {
       mat.dispose();
       if (hp) { hp.fill.material.dispose(); hp.bg.material.dispose(); }
       if (tag) { tag.material.map.dispose(); tag.material.dispose(); }
+      if (glow) { glow.material.dispose(); glow.userData.core.material.dispose(); }
     },
   };
 }

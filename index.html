@@ -6,6 +6,12 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Sky Grapple</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1f63e0" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-title" content="Sky Grapple" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script type="importmap">
@@ -21,6 +27,7 @@
   <canvas id="c"></canvas>
   <div id="whiteout"></div>
   <div id="hurt"></div>
+  <div id="shieldFx"></div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
@@ -44,7 +51,7 @@
     <div id="abilities"></div>
     <div id="toast"></div>
     <div id="shopPrompt" class="hidden">Press <b>E</b> to open the shop</div>
-    <div id="help" class="desktop-only">WASD move · Shift run · Space jump · <b>Click</b> shoot / pull · <b>Right-click / Q</b> cancel · <b>1–5</b> abilities · E shop · M mute</div>
+    <div id="help" class="desktop-only">WASD move · Shift run · Space jump · <b>Click</b> shoot / pull · <b>Right-click / Q</b> cancel · <b>1–9, 0</b> abilities · E shop · M mute</div>
   </div>
 
   <!-- Touch controls -->
@@ -72,6 +79,8 @@
       <label class="field small">Graphics
         <select id="quality"><option value="high">High (PC)</option><option value="low">Low (phone)</option></select>
       </label>
+      <button id="installBtn" class="hidden">📲 Install app</button>
+      <div id="iosHint" class="hidden">📲 To install on iPhone: tap <b>Share</b> then <b>Add to Home Screen</b>.</div>
       <div id="menuStatus"></div>
       <details>
         <summary>How to play</summary>
@@ -82,9 +91,9 @@
           <li>Enemies come in types: <b>Grapplers</b>, fast swap-happy <b>Zippers</b> (pink), long-range <b>Snipers</b> (orange) and big <b>Brutes</b> that hit hard. Every few minutes a crowned <b>SKY TITAN</b> boss appears with a 300-coin bounty.</li>
           <li>Red Grapplers walk, run, grapple between islands, hook you to them, and do the dangerous <b>swap</b>: they fly to you and you get flung to where they were.</li>
           <li>Fall into the clouds and you respawn at the safe spawn island after 5 seconds.</li>
-          <li>Shops also sell <b>abilities</b> (Swap Shot, Super Leap, Dash, Shockwave, Rewind). Each gets its own button.</li>
+          <li>Shops also sell <b>abilities</b> (Swap Shot, Super Leap, Dash, Shockwave, Rewind, Magnet, Shield, Glide, Hook Bomb, Heal). Each gets its own button.</li>
           <li>Collect 🪙 coins and find the rare <b>SHOP</b> on big islands (follow the arrow at the top) for grapple upgrades.</li>
-          <li>Online is free-for-all with friendly fire. You are <b style="color:#5aa0ff">blue</b>, other players <b style="color:#5fe07a">green</b>, enemies <b style="color:#ff6b6b">red</b>.</li>
+          <li>Online is free-for-all with friendly fire. You are <b style="color:#5aa0ff">blue</b>, other players glowing <b style="color:#5fe07a">green</b> (visible through walls), enemies <b style="color:#ff6b6b">red</b>.</li>
         </ul>
       </details>
     </div>

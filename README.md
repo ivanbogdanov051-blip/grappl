@@ -12,6 +12,10 @@ The game is a set of ES modules, so double-clicking `index.html` does **not** wo
 
 **To play with friends anywhere:** upload the folder (`index.html`, `style.css`, `js/`) to any static host: GitHub Pages, Netlify Drop, itch.io (HTML game) or Cloudflare Pages. Then share the link. Three.js and PeerJS load from a CDN, so you need an internet connection.
 
+## Install it as an app
+
+Open the GitHub Pages link in Chrome or Edge (PC or Android) and press **📲 Install app** in the menu, or use the browser's install icon or menu. On iPhone, open it in Safari and tap **Share → Add to Home Screen**. The app gets its own icon, opens fullscreen, and solo mode also works offline.
+
 ## Controls
 
 | | PC | Phone |
@@ -23,7 +27,7 @@ The game is a set of ES modules, so double-clicking `index.html` does **not** wo
 | Shoot hook → **Pull** | left click (or F) | SHOOT → PULL button |
 | Cancel hook | right click / Q | ✕ button |
 | Shop (when near one) | E | SHOP button |
-| Abilities | keys 1–5 (or click the icons) | ability buttons at the bottom |
+| Abilities | keys 1–9, 0 (or click the icons) | ability buttons at the bottom |
 | Mute | M | |
 
 ## How the hook works
@@ -63,13 +67,18 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | 3 | 💨 Dash | 4 s | A burst of speed where you look |
 | 4 | 💥 Shockwave | 9 s | Blasts everyone within 14 m away from you (20 damage) |
 | 5 | ⏪ Rewind | 15 s | Teleports you back to where you were 3 seconds ago |
+| 6 | 🧲 Magnet | 8 s | Yanks every enemy and player within 35 m straight to you |
+| 7 | 🛡️ Shield | 14 s | Blocks every hit, hook and knockback for 4 s |
+| 8 | 🪂 Glide | 12 s | Slow fall with free steering for 6 s |
+| 9 | 💣 Hook Bomb | 7 s | An exploding hook: up to 40 damage and knockback in 9 m. Blast yourself for a rocket jump |
+| 0 | 💚 Heal | 20 s | Restores 50 health instantly |
 
 ## Multiplayer
 
 - **Online – public lobby**: everyone who clicks it ends up in the same world.
 - **Create private room**: you get a 5-letter code. Click the room info at the top right to copy an invite link (`?room=CODE`).
 - The first player in a room hosts it. If the host leaves, another player takes over automatically.
-- You are blue, other players are green and enemies are red. It's free-for-all with friendly fire.
+- You are blue, other players glow green (visible through walls and islands) and enemies are red. It's free-for-all with friendly fire.
 - It uses the free public PeerJS server and WebRTC. Some strict networks (some school, work or mobile-carrier networks) can block peer-to-peer connections.
 
 ## Graphics

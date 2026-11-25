@@ -22,7 +22,7 @@ export class Player {
     this.hp = 100; this.dead = false; this.deadT = 0; this.lastAttacker = null;
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
-    this.cd = {}; this.superShot = 0; this.hist = []; this.histT = 0;
+    this.cd = {}; this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -43,7 +43,7 @@ export class Player {
     this.pitch = 0;
     this.lastAttacker = null;
     this.climbT = 0;
-    this.hist.length = 0; this.superShot = 0;
+    this.hist.length = 0; this.superShot = 0; this.shieldT = 0; this.glideT = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -65,7 +65,7 @@ export class Player {
       // the hook travels exactly along the crosshair ray (rope is drawn from the gun muzzle)
       h.pos.copy(o).addScaledVector(f, 0.4);
       h.dir.copy(f);
-      h.dist = 0.4; h.target = null; h.swap = false;
+      h.dist = 0.4; h.target = null; h.swap = false; h.bomb = false;
       h.super = this.superShot > 0 && !this.onGround;
       if (h.super) { this.superShot = 0; g.ui.toast('⚡ SUPER SHOT'); }
       h.state = HOOK.FLYING;
@@ -111,7 +111,7 @@ export class Player {
         const h = this.hook;
         h.pos.copy(g.camera.position).addScaledVector(f, 0.4);
         h.dir.copy(f); h.dist = 0.4; h.target = null;
-        h.state = HOOK.FLYING; h.swap = true; h.super = false;
+        h.state = HOOK.FLYING; h.swap = true; h.bomb = false; h.super = false;
         g.sfx.shoot(); g.recoil = 1;
         break;
       }
@@ -129,6 +129,51 @@ export class Player {
       case 'shock':
         if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
         g.shockwave(this);
+        break;
+      case 'bomb': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const h = this.hook;
+        h.pos.copy(g.camera.position).addScaledVector(f, 0.4);
+        h.dir.copy(f); h.dist = 0.4; h.target = null;
+        h.state = HOOK.FLYING; h.bomb = true; h.swap = false; h.super = false;
+        g.sfx.shoot(); g.recoil = 1;
+        break;
+      }
+      case 'magnet': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        f.y = 0; f.normalize();
+        const pt = this.eye(_b).addScaledVector(f, 3);
+        let n = 0;
+        const pull = (ent) => {
+          if (ent.dead || ent === this || ent.pos.distanceTo(this.pos) > 35) return;
+          g.deliverHit(ent.id, { mode: 'pull', dmg: 10, a: pt.toArray(), attacker: this.id, aname: g.name });
+          n++;
+        };
+        g.enemies.forEach(pull);
+        g.remotes.forEach(pull);
+        _a.copy(this.pos); _a.y += 0.8;
+        g.particles.burst(_a, 0xc77dff, 30, 12, 0.22);
+        g.sfx.zip();
+        g.ui.toast(n ? `🧲 Pulled in ${n}!` : '🧲 Nobody in range');
+        break;
+      }
+      case 'shield':
+        this.shieldT = 4;
+        _a.copy(this.pos); _a.y += 0.8;
+        g.particles.burst(_a, 0x6fd3ff, 24, 6, 0.2);
+        g.sfx.buy();
+        break;
+      case 'glide':
+        this.glideT = 6;
+        if (this.vel.y < 0) this.vel.y *= 0.3;
+        g.sfx.jump(); g.ui.toast('🪂 Gliding!');
+        break;
+      case 'heal':
+        if (this.hp >= this.stats.health) { g.ui.toast('💚 Already at full health'); return false; }
+        this.hp = Math.min(this.stats.health, this.hp + 50);
+        _a.copy(this.pos); _a.y += 0.8;
+        g.particles.burst(_a, 0x4dff88, 26, 6, 0.2);
+        g.sfx.coin();
         break;
       case 'rewind': {
         if (this.hist.length < 3) return false;
@@ -152,6 +197,7 @@ export class Player {
     if (this.dead) return;
     const g = this.game;
     if (inSafeZone(this.pos)) { g.ui.toast('🛡️ Safe zone protected you'); return; }
+    if (this.shieldT > 0) { g.ui.toast('🛡️ Blocked!'); _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fd3ff, 10, 5, 0.15); return; }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
     this.hp -= hit.dmg || 0;
     this.lastHurt = g.time;
@@ -206,9 +252,9 @@ export class Player {
       }
       if (input.consumeJump()) { this.vel.y = 9.5; this.onGround = false; g.sfx.jump(); }
     } else {
-      const air = 16 * dt;
+      const air = (this.glideT > 0 ? 34 : 16) * dt;
       const nvx = this.vel.x + wx * air, nvz = this.vel.z + wz * air;
-      const nhs = Math.hypot(nvx, nvz), lim = Math.max(hs, maxSp);
+      const nhs = Math.hypot(nvx, nvz), lim = Math.max(hs, this.glideT > 0 ? 24 : maxSp);
       if (nhs > lim && nhs > 0) { this.vel.x = (nvx / nhs) * lim; this.vel.z = (nvz / nhs) * lim; }
       else { this.vel.x = nvx; this.vel.z = nvz; }
       const drag = Math.max(0, 1 - 0.04 * dt);
@@ -217,6 +263,8 @@ export class Player {
     }
     this.climbT -= dt;
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
+    if (this.shieldT > 0) this.shieldT -= dt;
+    if (this.glideT > 0) { this.glideT -= dt; if (this.onGround && this.glideT < 5.7) this.glideT = 0; else if (this.vel.y < -3.5) this.vel.y = -3.5; }
     if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
     this.histT -= dt;
     if (this.histT <= 0) { this.histT = 0.1; this.hist.push(this.pos.clone()); if (this.hist.length > 30) this.hist.shift(); }
@@ -243,7 +291,11 @@ export class Player {
       const wd = wh ? wh.dist : Infinity;
       if (wh) _c.copy(wh.point);
       const eh = this.safe ? null : g.hitTestEntities(h.pos, h.dir, step, this.id, false);
-      if (eh && eh.dist < wd && h.swap) {
+      if (h.bomb && ((eh && eh.dist < wd) || wh)) {
+        const at = eh && eh.dist < wd ? eh.ent.pos.clone().setY(eh.ent.pos.y + 0.7) : _c.clone();
+        h.pos.copy(at); h.state = HOOK.RETRACT; h.bomb = false;
+        g.explode(at, this);
+      } else if (eh && eh.dist < wd && h.swap) {
         const tg = eh.ent;
         const mine = this.pos.clone(); mine.y += 0.5;
         const theirs = tg.pos.clone(); theirs.y += 1;
