@@ -23,6 +23,7 @@ The game is a set of ES modules, so double-clicking `index.html` does **not** wo
 | Shoot hook → **Pull** | left click (or F) | SHOOT → PULL button |
 | Cancel hook | right click / Q | ✕ button |
 | Shop (when near one) | E | SHOP button |
+| Abilities | keys 1–5 (or click the icons) | ability buttons at the bottom |
 | Mute | M | |
 
 ## How the hook works
@@ -42,6 +43,16 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 - Falling into the clouds kills you. You respawn on the **spawn island** after 5 seconds. Spawn is a safe zone: nobody can hurt you there, you can't hurt anyone from there, and you heal there. Its blue light beam is visible from far away.
 - Coins come from pickups (2 each), killing enemies (15) and killing players (25). Your coins and upgrades are saved in your browser.
 - Shops only appear on big islands. The arrow at the top of the screen points to the nearest one. They sell 7 upgrades with 5 levels each: range, hook speed, pull power, climb boost, damage, max health and sprint speed.
+
+## Abilities (shop, buy once)
+
+| Key | Ability | Cooldown | What it does |
+|---|---|---|---|
+| 1 | 🔄 Swap Shot | 5 s | A hook that swaps places with whoever it hits |
+| 2 | 🦘 Super Leap | 10 s | Launches you high, and your next mid-air shot gets 2× range, speed and pull boost |
+| 3 | 💨 Dash | 4 s | A burst of speed where you look |
+| 4 | 💥 Shockwave | 9 s | Blasts everyone within 14 m away from you (20 damage) |
+| 5 | ⏪ Rewind | 15 s | Teleports you back to where you were 3 seconds ago |
 
 ## Multiplayer
 

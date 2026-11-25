@@ -299,7 +299,8 @@ export class Enemy {
       _a.fromArray(hit.b);
       launchTo(this, this.pos, _a, 45, 2, true);
     } else if (hit.mode === 'bump') {
-      this.vel.x += hit.d[0] * 15; this.vel.z += hit.d[2] * 15; this.vel.y = 7; this.braking = false;
+      const k = hit.k || 1;
+      this.vel.x += hit.d[0] * 15 * k; this.vel.z += hit.d[2] * 15 * k; this.vel.y = 7 + 5 * (k - 1); this.braking = false;
       this.onGround = false;
     }
     if (this.hp <= 0) this.die();

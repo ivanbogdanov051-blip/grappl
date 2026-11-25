@@ -15,6 +15,8 @@ export class Input {
       if (e.code === 'KeyQ' || e.code === 'KeyX') game.cancelHook();
       if (e.code === 'KeyE') game.interact();
       if (e.code === 'KeyF') game.shootHook();
+      const ak = { Digit1: 'swap', Digit2: 'leap', Digit3: 'dash', Digit4: 'shock', Digit5: 'rewind' }[e.code];
+      if (ak) game.useAbility(ak);
       if (e.code === 'KeyM') game.ui.toast(game.sfx.toggleMute() ? '🔇 Muted' : '🔊 Sound on');
     });
     addEventListener('keyup', (e) => { this.keys[e.code] = false; });

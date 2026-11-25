@@ -11,7 +11,7 @@ import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope } from './models.js';
-import { computeStats, COSTS, MAX_LEVEL } from './upgrades.js';
+import { computeStats, COSTS, MAX_LEVEL, ABILITY } from './upgrades.js';
 
 window.__errs = [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -23,7 +23,7 @@ const SAVE_KEY = 'skygrapple_save_v1';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3();
 
 function loadSave() {
-  const def = { name: '', coins: 0, up: {}, quality: isTouch ? 'low' : 'high' };
+  const def = { name: '', coins: 0, up: {}, abil: {}, quality: isTouch ? 'low' : 'high' };
   try { return { ...def, ...JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') }; } catch (e) { return def; }
 }
 function genCode() {
@@ -82,6 +82,8 @@ class Game {
     this.world.preload(SPAWN, 1);
     this.addBeacon();
     this.player.respawn();
+    this.save.abil = this.save.abil || {};
+    this.ui.renderAbilities();
     addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
     r.setAnimationLoop(() => this.loop());
@@ -225,6 +227,40 @@ class Game {
     this.persist();
     this.sfx.buy();
     this.ui.renderShop();
+  }
+  buyAbility(key) {
+    const A = ABILITY[key];
+    if (!A || this.save.abil[key] || this.save.coins < A.cost) return;
+    this.save.coins -= A.cost;
+    this.save.abil[key] = true;
+    this.persist();
+    this.sfx.buy();
+    this.ui.renderShop();
+    this.ui.renderAbilities();
+    this.ui.toast(A.icon + ' ' + A.name + ' unlocked! Use its button.');
+  }
+  useAbility(key) {
+    if (!this.running || this.shopOpen || !this.save.abil[key]) return;
+    this.sfx.init();
+    this.player.useAbility(key);
+  }
+  shockwave(p) {
+    const c = p.pos;
+    const hit = (ent) => {
+      if (ent.dead || ent === p) return;
+      const dx = ent.pos.x - c.x, dy = ent.pos.y - c.y, dz = ent.pos.z - c.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 14) return;
+      const l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(ent.id, { mode: 'bump', dmg: 20, d: [dx / l, 0, dz / l], k: 0.9 + 1.8 * (1 - d / 14), attacker: p.id, aname: this.name });
+    };
+    for (const e of this.enemies) hit(e);
+    for (const r of this.remotes.values()) hit(r);
+    _v.copy(c); _v.y += 0.4;
+    this.particles.burst(_v, 0x9fd8ff, 40, 16, 0.3);
+    this.particles.burst(_v, 0xffffff, 20, 10, 0.2);
+    this.shake(0.6);
+    this.sfx.hurt(); this.sfx.thunk();
   }
   addCoins(n, pickup) {
     this.save.coins += n;
@@ -530,6 +566,7 @@ class Game {
     if (this.hudT <= 0) {
       this.hudT = 0.1;
       ui.hud(p, this);
+      ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
         const st = this.net.ready ? `${players} online${this.net.isHost ? ' · host' : ''}` : this.netStatus || 'Connecting…';
@@ -606,6 +643,42 @@ if (location.search.includes("autotest")) {
     let deaths = 0; const od2 = game.onLocalDeath.bind(game); game.onLocalDeath = (a, b) => { deaths++; return od2(a, b); };
     sim(30);
     log.fight = { modes, hits, deaths, playerHp: Math.round(p.hp), dead: p.dead, enemies: game.enemies.map((e) => [Math.round(e.pos.y), e.hp, e.onGround ? 1 : 0]) };
+    // abilities
+    {
+      for (const k of ['swap', 'leap', 'dash', 'shock', 'rewind']) game.save.abil[k] = true;
+      game.ui.renderAbilities();
+      const ab = {};
+      const c2 = game.world.spawnCandidates(p.pos, 100, 900).sort((a, b) => b.R - a.R)[0];
+      const st2 = c2.pointAt(0, 0.1);
+      p.dead = false; p.hp = 100; p.pos.set(st2.x, st2.y + 0.5, st2.z); p.vel.set(0, 0, 0); p.cd = {}; sim(0.5);
+      // swap shot at a frozen enemy 15 m away
+      const en = new Enemy(game, p.pos.clone().add(new THREE.Vector3(0, 0.3, -15))); en.think = 999; en.cool = 999; game.enemies.push(en); sim(0.5);
+      const before = { me: p.pos.clone(), it: en.pos.clone() };
+      const ec = en.pos.clone(); ec.y += 0.7; aim(ec);
+      ab.swapUsed = p.useAbility('swap'); sim(1.5);
+      ab.swap = { meMovedToward: Math.round(p.pos.distanceTo(before.it)), enemyMovedToward: Math.round(en.pos.distanceTo(before.me)), enemyHp: en.hp, cd: Math.round(p.cd.swap) };
+      ab.swapAgainBlocked = !p.useAbility('swap');
+      // shockwave: enemy next to us
+      p.pos.copy(st2); p.pos.y += 0.5; p.vel.set(0, 0, 0); sim(0.5);
+      en.pos.copy(p.pos).add(new THREE.Vector3(4, 0.3, 0)); en.vel.set(0, 0, 0); sim(0.3);
+      const hp0 = en.hp; p.useAbility('shock'); sim(0.2);
+      ab.shock = { enemySpeed: Math.round(en.vel.length()), dmg: hp0 - en.hp };
+      // leap + super shot
+      for (let t = 0.2; t < 0.9; t += 0.1) { const q = c2.pointAt(2, t); q.y += 0.5; if (!game.world.raycast(q, new THREE.Vector3(0, 1, 0), 60)) { p.pos.copy(q); p.vel.set(0, 0, 0); break; } }
+      sim(1); const y0 = p.pos.y; p.useAbility('leap'); sim(0.9);
+      ab.leap = { rose: Math.round(p.pos.y - y0), superReady: p.superShot > 0 };
+      p.pitch = -0.6; p.shoot(); ab.leap.superShot = !!p.hook.super; p.cancel(); sim(2.5);
+      // dash
+      p.pos.copy(st2); p.pos.y += 0.5; p.vel.set(0, 0, 0); sim(0.5);
+      p.pitch = 0; p.useAbility('dash'); sim(0.05); ab.dashSpeed = Math.round(p.vel.length());
+      // rewind: walk off into the void then rewind
+      sim(0.5); const safeSpot = p.pos.clone(); sim(1);
+      p.pos.set(st2.x + 2000, 0, st2.z); p.vel.set(0, 0, 0); sim(1);
+      p.cd.rewind = 0; ab.rewindUsed = p.useAbility('rewind'); sim(0.1);
+      ab.rewindBackNear = Math.round(p.pos.distanceTo(safeSpot));
+      ab.buttons = document.querySelectorAll('#abilities .ab').length;
+      log.abilities = ab;
+    }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);
     game.renderer.render = realRender;
@@ -619,6 +692,7 @@ if (shotM) {
     game.start('solo');
     const p = game.player, n = +shotM[1];
     if (n === 1) { p.yaw = 2.4; p.pitch = -0.05; }
+    else if (n === 3) { game.save.coins = 85; game.save.abil = { swap: true, dash: true, leap: true }; game.ui.renderAbilities(); game.player.cd = { dash: 2.5 }; setTimeout(() => { game.shopOpen = true; game.ui.openShop(); }, 100); }
     else if (n === 9) { setTimeout(() => { game.running = false; game.ui.showHud(false); game.ui.showMenu(false); }, 50); }
     else {
       const c = game.world.spawnCandidates(p.pos, 150, 700).sort((a, b) => b.R - a.R)[n - 2] || game.world.spawnCandidates(p.pos, 150, 700)[0];

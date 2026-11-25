@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { integrate, launchTo, wallClimb } from './entity.js';
 import { KILL_Y, SPAWN, inSafeZone } from './world.js';
+import { ABILITY } from './upgrades.js';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -21,6 +22,7 @@ export class Player {
     this.hp = 100; this.dead = false; this.deadT = 0; this.lastAttacker = null;
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
+    this.cd = {}; this.superShot = 0; this.hist = []; this.histT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -41,6 +43,7 @@ export class Player {
     this.pitch = 0;
     this.lastAttacker = null;
     this.climbT = 0;
+    this.hist.length = 0; this.superShot = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -62,13 +65,16 @@ export class Player {
       // the hook travels exactly along the crosshair ray (rope is drawn from the gun muzzle)
       h.pos.copy(o).addScaledVector(f, 0.4);
       h.dir.copy(f);
-      h.dist = 0.4; h.target = null;
+      h.dist = 0.4; h.target = null; h.swap = false;
+      h.super = this.superShot > 0 && !this.onGround;
+      if (h.super) { this.superShot = 0; g.ui.toast('⚡ SUPER SHOT'); }
       h.state = HOOK.FLYING;
       g.sfx.shoot();
       g.recoil = 1;
     } else if (h.state === HOOK.ATTACHED) {
       _a.copy(this.pos); _a.y += 0.7;
-      launchTo(this, _a, h.anchor, s.pull, s.climbUp, true, 1.6);
+      const mul = h.super ? 2 : 1;
+      launchTo(this, _a, h.anchor, s.pull * mul, s.climbUp * mul, true, 1.6);
       this.climbT = 1.5;
       h.state = HOOK.IDLE;
       g.sfx.zip();
@@ -94,6 +100,54 @@ export class Player {
     }
   }
 
+  useAbility(key) {
+    const g = this.game, A = ABILITY[key];
+    if (this.dead || !A) return false;
+    if ((this.cd[key] || 0) > 0) return false;
+    const f = this.forward(_f);
+    switch (key) {
+      case 'swap': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const h = this.hook;
+        h.pos.copy(g.camera.position).addScaledVector(f, 0.4);
+        h.dir.copy(f); h.dist = 0.4; h.target = null;
+        h.state = HOOK.FLYING; h.swap = true; h.super = false;
+        g.sfx.shoot(); g.recoil = 1;
+        break;
+      }
+      case 'leap':
+        this.vel.y = 40; this.onGround = false; this.pos.y += 0.1; this.braking = false;
+        this.superShot = 10;
+        g.particles.burst(this.pos, 0xffd23a, 18, 8, 0.25);
+        g.sfx.zip(); g.ui.toast('🦘 Next mid-air shot is ×2!');
+        break;
+      case 'dash':
+        this.vel.set(f.x * 38, Math.max(f.y * 38, 0) + 5, f.z * 38);
+        this.onGround = false; this.braking = false; this.pos.y += 0.05;
+        g.sfx.zip(); g.shake(0.25);
+        break;
+      case 'shock':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        g.shockwave(this);
+        break;
+      case 'rewind': {
+        if (this.hist.length < 3) return false;
+        _a.copy(this.pos); _a.y += 0.7;
+        g.particles.burst(_a, 0x7fd4ff, 16, 6, 0.2);
+        this.pos.copy(this.hist[0]);
+        this.vel.set(0, 0, 0); this.braking = false; this.climbT = 0;
+        this.hist.length = 0;
+        this.hook.state = HOOK.IDLE;
+        _a.copy(this.pos); _a.y += 0.7;
+        g.particles.burst(_a, 0x7fd4ff, 16, 6, 0.2);
+        g.sfx.buy();
+        break;
+      }
+    }
+    this.cd[key] = A.cd;
+    return true;
+  }
+
   applyHit(hit) {
     if (this.dead) return;
     const g = this.game;
@@ -112,7 +166,8 @@ export class Player {
       this.climbT = 0;
       g.ui.toast(`🔄 SWAPPED by ${hit.aname}! Grapple to safety!`);
     } else if (hit.mode === 'bump') {
-      this.vel.x += hit.d[0] * 15; this.vel.z += hit.d[2] * 15; this.vel.y = 7; this.braking = false;
+      const k = hit.k || 1;
+      this.vel.x += hit.d[0] * 15 * k; this.vel.z += hit.d[2] * 15 * k; this.vel.y = 7 + 5 * (k - 1); this.braking = false;
       this.onGround = false;
     } else if (hit.mode === 'latch') {
       g.ui.toast(`⚠️ ${hit.aname} hooked you!`);
@@ -160,6 +215,10 @@ export class Player {
       if (this.inWater && input.consumeJump()) this.vel.y = 8;
     }
     this.climbT -= dt;
+    for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
+    if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
+    this.histT -= dt;
+    if (this.histT <= 0) { this.histT = 0.1; this.hist.push(this.pos.clone()); if (this.hist.length > 30) this.hist.shift(); }
     integrate(this, dt, g.world);
     wallClimb(this, s.climbReach, s.climbSpeed);
     this.updateHook(dt);
@@ -173,18 +232,31 @@ export class Player {
   updateHook(dt) {
     const h = this.hook, g = this.game, s = this.stats;
     if (h.state === HOOK.FLYING) {
-      const step = s.hookSpeed * dt;
+      const mul = h.super ? 2 : 1;
+      const step = s.hookSpeed * mul * dt;
       const wh = g.world.raycast(h.pos, h.dir, step);
       const wd = wh ? wh.dist : Infinity;
       if (wh) _c.copy(wh.point);
       const eh = this.safe ? null : g.hitTestEntities(h.pos, h.dir, step, this.id, false);
-      if (eh && eh.dist < wd) {
+      if (eh && eh.dist < wd && h.swap) {
+        const tg = eh.ent;
+        const mine = this.pos.clone(); mine.y += 0.5;
+        const theirs = tg.pos.clone(); theirs.y += 1;
+        g.deliverHit(tg.id, { mode: 'swap', dmg: 15, b: mine.toArray(), attacker: this.id, aname: g.name });
+        launchTo(this, this.pos, theirs, 50, 3, true);
+        this.climbT = 1;
+        h.state = HOOK.RETRACT; h.swap = false;
+        g.sfx.hit(); g.ui.hitMarker(); g.ui.toast('🔄 SWAPPED!');
+        g.particles.burst(theirs, 0xb48bff, 16, 7, 0.2);
+      } else if (eh && eh.dist < wd) {
         h.state = HOOK.LATCHED;
         h.target = eh.ent.id;
         h.pos.copy(eh.ent.pos); h.pos.y += 0.7;
         g.deliverHit(eh.ent.id, { mode: 'latch', dmg: s.damage, attacker: this.id, aname: g.name });
         g.sfx.hit(); g.ui.hitMarker();
         g.particles.burst(h.pos, 0xffffff, 10, 6, 0.15);
+      } else if (wh && h.swap) {
+        h.pos.copy(_c); h.state = HOOK.RETRACT; h.swap = false;
       } else if (wh) {
         h.pos.copy(_c); h.anchor.copy(_c);
         h.state = HOOK.ATTACHED;
@@ -193,7 +265,7 @@ export class Player {
       } else {
         h.pos.addScaledVector(h.dir, step);
         h.dist += step;
-        if (h.dist >= s.range) h.state = HOOK.RETRACT;
+        if (h.dist >= s.range * mul) h.state = HOOK.RETRACT;
       }
     } else if (h.state === HOOK.LATCHED) {
       const tg = g.getEntity(h.target);

@@ -25,3 +25,13 @@ export function computeStats(up) {
     speed: 12 + 1.5 * l('speed'),
   };
 }
+
+// Active abilities: bought once in the shop, then used with their own button (keys 1-5 on PC).
+export const ABILITIES = [
+  { key: 'swap', icon: '🔄', name: 'Swap Shot', cost: 60, cd: 5, desc: 'Fire a hook: whoever it hits swaps places with you. They get flung to your spot.' },
+  { key: 'leap', icon: '🦘', name: 'Super Leap', cost: 70, cd: 10, desc: 'Launch high into the air. Your next mid-air shot gets 2× range, speed and pull boost.' },
+  { key: 'dash', icon: '💨', name: 'Dash', cost: 50, cd: 4, desc: 'Instant burst of speed where you look. Great for saving a fall.' },
+  { key: 'shock', icon: '💥', name: 'Shockwave', cost: 90, cd: 9, desc: 'Blast everyone within 14 m away from you (20 dmg). Knock them off the island!' },
+  { key: 'rewind', icon: '⏪', name: 'Rewind', cost: 100, cd: 15, desc: 'Teleport back to where you were 3 seconds ago. Undo a bad fall.' },
+];
+export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));

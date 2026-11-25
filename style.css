@@ -110,3 +110,18 @@ summary { cursor: pointer; font-weight: 700; }
   #btnRun { bottom: 126px; }
   .tbtn.small { top: 92px; }
 }
+
+/* ---------- Ability bar */
+#abilities { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: auto; }
+.ab { position: relative; width: 56px; height: 56px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.45); background: rgba(10,20,40,0.55); color: #fff; overflow: hidden; padding: 0; touch-action: none; cursor: pointer; }
+.ab .ai { font-size: 26px; line-height: 52px; }
+.ab .ak { position: absolute; left: 4px; top: 2px; font-size: 10px; font-weight: 800; opacity: 0.8; }
+.ab .acd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,0.6); font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.ab.ready { border-color: #6dffb0; }
+.ab.charged { border-color: #ffd23a; box-shadow: 0 0 12px #ffd23a; }
+.ab:active { transform: scale(0.92); }
+body.touch #abilities { bottom: 10px; }
+body.touch .ab { width: 50px; height: 50px; }
+body.touch .ab .ai { font-size: 22px; line-height: 46px; }
+#shopList h3 { margin: 8px 0 0; font-size: 14px; color: #ffd23a; }
+.upg.ability { background: rgba(120,90,255,0.14); }

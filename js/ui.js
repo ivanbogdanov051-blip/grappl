@@ -1,4 +1,4 @@
-import { UPGRADES, COSTS, MAX_LEVEL } from './upgrades.js';
+import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES } from './upgrades.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -113,6 +113,34 @@ export class UI {
   deathCount(n) { $('deathCount').textContent = n; }
   hideDeath() { $('death').classList.add('hidden'); }
 
+  renderAbilities() {
+    const g = this.g, bar = $('abilities');
+    bar.innerHTML = '';
+    this.abBtns = {};
+    ABILITIES.forEach((A, i) => {
+      if (!g.save.abil[A.key]) return;
+      const b = document.createElement('button');
+      b.className = 'ab';
+      b.innerHTML = `<span class="ai">${A.icon}</span><span class="ak">${i + 1}</span><span class="acd"></span>`;
+      b.title = A.name;
+      const fire = (e) => { e.preventDefault(); e.stopPropagation(); g.useAbility(A.key); };
+      b.addEventListener('touchstart', fire, { passive: false });
+      b.addEventListener('mousedown', fire);
+      bar.appendChild(b);
+      this.abBtns[A.key] = { b, cd: b.querySelector('.acd'), max: A.cd };
+    });
+  }
+  updateAbilities(p) {
+    if (!this.abBtns) return;
+    for (const k in this.abBtns) {
+      const o = this.abBtns[k];
+      const left = Math.max(0, p.cd[k] || 0);
+      o.cd.style.height = (left / o.max) * 100 + '%';
+      o.cd.textContent = left > 0 ? Math.ceil(left) : '';
+      o.b.classList.toggle('ready', left <= 0);
+      if (k === 'leap') o.b.classList.toggle('charged', p.superShot > 0);
+    }
+  }
   openShop() { this.renderShop(); $('shop').classList.remove('hidden'); }
   closeShop() { $('shop').classList.add('hidden'); }
   renderShop() {
@@ -136,5 +164,20 @@ export class UI {
       row.appendChild(b);
       list.appendChild(row);
     }
+    const h = document.createElement('h3');
+    h.textContent = 'Abilities: buy once, then use their button (PC keys 1–5)';
+    list.appendChild(h);
+    ABILITIES.forEach((A, i) => {
+      const owned = !!g.save.abil[A.key];
+      const row = document.createElement('div');
+      row.className = 'upg ability';
+      row.innerHTML = `<div class="uinfo"><div class="un">${A.icon} ${A.name} <span class="pips">key ${i + 1} · ${A.cd}s cooldown</span></div><div class="ud">${A.desc}</div></div>`;
+      const b = document.createElement('button');
+      b.textContent = owned ? 'OWNED' : `🪙 ${A.cost}`;
+      b.disabled = owned || g.save.coins < A.cost;
+      b.onclick = () => g.buyAbility(A.key);
+      row.appendChild(b);
+      list.appendChild(row);
+    });
   }
 }
