@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Sky Grapple</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="whiteout"></div>
+  <div id="hurt"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="topLeft">
+      <div id="hpBar"><div id="hpFill"></div><span id="hpText">100</span></div>
+      <div id="coins">🪙 <span id="coinText">0</span></div>
+      <div id="speedo"></div>
+    </div>
+    <div id="topCenter">
+      <div id="shopArrowWrap" class="hidden"><div id="shopArrow">▲</div><span id="shopDist"></span></div>
+      <div id="safeTag" class="hidden">🛡️ SAFE ZONE</div>
+    </div>
+    <div id="topRight">
+      <div id="netInfo" class="hidden"></div>
+      <div id="feed"></div>
+    </div>
+    <div id="crosshair"><div class="ring"></div><div class="dot"></div></div>
+    <div id="hitmark">✕</div>
+    <div id="hookState"></div>
+    <div id="toast"></div>
+    <div id="shopPrompt" class="hidden">Press <b>E</b> to open the shop</div>
+    <div id="help" class="desktop-only">WASD move · Shift run · Space jump · <b>Click</b> shoot / pull · <b>Right-click / Q</b> cancel · E shop · M mute</div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch" class="hidden">
+    <div id="touchLayer"></div>
+    <div id="stickBase"><div id="stickKnob"></div></div>
+    <button id="btnShoot" class="tbtn big">SHOOT</button>
+    <button id="btnCancel" class="tbtn hidden">✕</button>
+    <button id="btnJump" class="tbtn">JUMP</button>
+    <button id="btnRun" class="tbtn">RUN</button>
+    <button id="btnShop" class="tbtn hidden">🛒 SHOP</button>
+    <button id="btnMenu" class="tbtn small">☰</button>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu">
+    <div class="panel">
+      <h1>SKY GRAPPLE</h1>
+      <p class="sub">Grapple across endless sky islands. Don't fall.</p>
+      <label class="field">Your name <input id="nameInput" maxlength="16" autocomplete="off" /></label>
+      <button id="playSolo" class="primary">▶ Play Solo</button>
+      <button id="playPublic">🌐 Online – public lobby</button>
+      <button id="createRoom">➕ Create private room</button>
+      <div class="row"><input id="roomInput" placeholder="ROOM CODE" maxlength="6" autocomplete="off" /><button id="joinRoom">Join</button></div>
+      <label class="field small">Graphics
+        <select id="quality"><option value="high">High (PC)</option><option value="low">Low (phone)</option></select>
+      </label>
+      <div id="menuStatus"></div>
+      <details>
+        <summary>How to play</summary>
+        <ul>
+          <li><b>Shoot</b> your hook where you aim. When it sticks, the button turns into <b>Pull</b> – tap it to get launched (with a climb boost). Works mid-air too.</li>
+          <li>Missed? Hit <b>✕</b> (right-click / Q) to reel the hook back.</li>
+          <li>Hook an <b style="color:#ff6b6b">enemy</b> or player to damage them, then <b>Yank</b> to fling them toward (and past) you – right off the island!</li>
+          <li>Red Grapplers walk, run, grapple between islands, hook you to them, and do the dangerous <b>swap</b>: they fly to you and you get flung to where they were.</li>
+          <li>Fall into the clouds and you respawn at the safe spawn island after 5 seconds.</li>
+          <li>Collect 🪙 coins and find the rare <b>SHOP</b> on big islands (follow the arrow at the top) for grapple upgrades.</li>
+          <li>Online is free-for-all with friendly fire. You are <b style="color:#5aa0ff">blue</b>, other players <b style="color:#5fe07a">green</b>, enemies <b style="color:#ff6b6b">red</b>.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop" class="hidden">
+    <div class="panel wide">
+      <h2>🛒 Grapple Shop</h2>
+      <div id="shopCoins"></div>
+      <div id="shopList"></div>
+      <button id="shopClose" class="primary">Close (E)</button>
+    </div>
+  </div>
+
+  <!-- Death -->
+  <div id="death" class="hidden">
+    <div class="panel">
+      <h2 id="deathMsg">You fell!</h2>
+      <p>Respawning at the safe island in <span id="deathCount">5</span>…</p>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="hidden">
+    <div class="panel">
+      <h2>Paused</h2>
+      <p class="desktop-only">The game keeps running in multiplayer.</p>
+      <button id="resume" class="primary">Resume</button>
+      <button id="toMenu">Leave to menu</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
