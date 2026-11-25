@@ -136,6 +136,7 @@ export function makeCharacter(color, o = {}) {
   const bodyG = new THREE.Group();
   g.add(bodyG);
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05, emissive: 0x000000 });
+  if (o.ghost) { mat.transparent = true; mat.opacity = 0.55; mat.emissive.set(0x1a2266); }
   const body = new THREE.Mesh(boxGeo, mat);
   body.scale.setScalar(1.4);
   body.position.y = 0.7;
@@ -248,7 +249,7 @@ export function makeCharacter(color, o = {}) {
       }
       if (this.flash > 0) {
         this.flash -= dt * 4;
-        mat.emissive.setRGB(Math.max(0, this.flash) * 0.9, Math.max(0, this.flash) * 0.1, 0);
+        mat.emissive.setRGB(Math.max(0, this.flash) * 0.9, Math.max(0, this.flash) * 0.1, o.ghost ? 0.4 : 0);
       }
       if (glow) { const pulse = 0.5 + Math.sin(this.t * 4) * 0.15; glow.material.opacity = pulse; }
       if (hp && cam) hp.group.quaternion.copy(g.quaternion).invert().multiply(cam.quaternion);

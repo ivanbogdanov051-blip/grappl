@@ -27,7 +27,7 @@ Open the GitHub Pages link in Chrome or Edge (PC or Android) and press **📲 In
 | Shoot hook → **Pull** | left click (or F) | SHOOT → PULL button |
 | Cancel hook | right click / Q | ✕ button |
 | Shop (when near one) | E | SHOP button |
-| Abilities | keys 1–9, 0 (or click the icons) | ability buttons at the bottom |
+| Abilities | keys 1–9, 0 and R (or click the icons) | ability buttons at the bottom |
 | Mute | M | |
 
 ## How the hook works
@@ -50,7 +50,10 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | Zipper | pink, small | 45 | 35 | Fast, attacks often, loves the swap move |
 | Sniper | orange, small | 35 | 35 | Hooks you from up to 170 m away and keeps its distance |
 | Brute | dark red, big | 160 | 50 | Slow but hits hard; its bump sends you flying |
-| **Sky Titan** (boss) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears every few minutes and shows a boss health bar |
+| Bomber | orange | 70 | 40 | Throws exploding hooks (up to 32 damage, knockback) |
+| Magnetron | purple | 90 | 45 | Every 7 s yanks every player within 32 m to itself |
+| Phantom | see-through blue | 50 | 45 | Teleports right behind you, then shoves you |
+| **Sky Titan** (boss) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
 
 ## Rules
 
@@ -72,6 +75,7 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | 8 | 🪂 Glide | 12 s | Slow fall with free steering for 6 s |
 | 9 | 💣 Hook Bomb | 7 s | An exploding hook: up to 40 damage and knockback in 9 m. Blast yourself for a rocket jump |
 | 0 | 💚 Heal | 20 s | Restores 50 health instantly |
+| R | ⚔️ **PARRY** (200 coins) | 10 s | For 2 s you can't be hurt, and anyone who hits you gets launched at you at super speed and takes 50 damage. You deal no damage while parrying |
 
 ## Multiplayer
 

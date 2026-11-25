@@ -245,6 +245,34 @@ class Game {
     this.sfx.init();
     this.player.useAbility(key);
   }
+  enemyExplode(at, e) {
+    const hit = (ent) => {
+      if (ent.dead) return;
+      const dx = ent.pos.x - at.x, dy = ent.pos.y + 0.7 - at.y, dz = ent.pos.z - at.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 8) return;
+      const l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(ent.id, { mode: 'bump', dmg: Math.round(10 + 22 * (1 - d / 8)), d: [dx / l, 0, dz / l], k: 0.8 + 1.4 * (1 - d / 8), attacker: e.id, aname: e.name });
+    };
+    hit(this.player);
+    for (const r of this.remotes.values()) if (r.kind === 'player') hit(r);
+    this.particles.burst(at, 0xffb020, 28, 14, 0.4);
+    this.particles.burst(at, 0x3a3a3a, 14, 7, 0.45);
+    const dp = at.distanceTo(this.player.pos);
+    if (dp < 35) this.shake(0.6 * (1 - dp / 35) + 0.15);
+    this.sfx.near('thunk', at); this.sfx.near('hurt', at);
+  }
+  enemyMagnet(e) {
+    const to = e.pos.clone(); to.y += 1.2;
+    const pull = (ent) => {
+      if (ent.dead || ent.pos.distanceTo(e.pos) > 32) return;
+      this.deliverHit(ent.id, { mode: 'pull', dmg: 8, a: to.toArray(), attacker: e.id, aname: e.name });
+    };
+    pull(this.player);
+    for (const r of this.remotes.values()) if (r.kind === 'player') pull(r);
+    this.particles.burst(to, 0xc77dff, 26, 12, 0.22);
+    this.sfx.near('zip', e.pos);
+  }
   bossSlam(e) {
     const c = e.pos;
     const hit = (ent) => {
@@ -365,6 +393,7 @@ class Game {
     return best;
   }
   deliverHit(id, hit) {
+    if (hit.attacker === this.player.id && this.player.parryT > 0 && !hit.parry) hit = { ...hit, dmg: 0 };
     if (id === this.player.id) { this.player.applyHit(hit); return; }
     for (const e of this.enemies) if (e.id === id) { e.applyHit(hit); return; }
     const r = this.remotes.get(id);
@@ -401,16 +430,16 @@ class Game {
   }
   manageEnemies() {
     const p = this.player;
-    const cap = this.quality === 'high' ? 10 : 7;
+    const cap = this.quality === 'high' ? 16 : 11;
     for (const e of this.enemies) if (e.pos.distanceTo(p.pos) > (e.T.boss ? 1100 : 750) && !e.dead) { e.dead = true; e.dispose(); }
     this.enemies = this.enemies.filter((e) => !e.dead);
     if (p.dead) return;
     // boss: roughly every 2-3 minutes, if none is around
-    this.bossT = (this.bossT === undefined ? 70 : this.bossT) - 1.5;
+    this.bossT = (this.bossT === undefined ? 25 : this.bossT) - 0.8;
     if (this.bossT <= 0) {
-      this.bossT = 120 + Math.random() * 60;
+      this.bossT = 60 + Math.random() * 40;
       const has = this.enemies.some((e) => e.T.boss) || [...this.remotes.values()].some((r) => r.T && r.T.boss);
-      const big = this.world.spawnCandidates(p.pos, 140, 450).filter((I) => I.R >= 40);
+      const big = this.world.spawnCandidates(p.pos, 90, 320).filter((I) => I.R >= 30);
       if (!has && big.length) {
         const I = big[Math.floor(Math.random() * big.length)];
         const bp = I.pointAt(Math.random() * TAU, 0.3); bp.y += 2;
@@ -422,7 +451,7 @@ class Game {
     let near = this.enemies.length;
     for (const r of this.remotes.values()) if (r.kind === 'enemy' && r.pos.distanceTo(p.pos) < 500) near++;
     if (near >= cap) return;
-    const cands = this.world.spawnCandidates(p.pos, 110, 480);
+    const cands = this.world.spawnCandidates(p.pos, 70, 380);
     if (!cands.length) return;
     const I = cands[Math.floor(Math.random() * cands.length)];
     const pt = I.pointAt(Math.random() * TAU, Math.random() * 0.6);
@@ -531,7 +560,7 @@ class Game {
         r.update(dt);
       }
       this.spawnTimer -= dt;
-      if (this.spawnTimer <= 0) { this.spawnTimer = 1.5; this.manageEnemies(); }
+      if (this.spawnTimer <= 0) { this.spawnTimer = 0.8; this.manageEnemies(); }
       if (this.net && this.net.ready) {
         this.netTimer -= dt;
         if (this.netTimer <= 0) { this.netTimer = 1 / 12; this.sendState(); }
@@ -633,6 +662,21 @@ class Game {
       for (const e of this.enemies) if (e.T.boss && !e.dead) { const d = e.pos.distanceTo(p.pos); if (d < bd) { bd = d; boss = e; } }
       for (const r of this.remotes.values()) if (r.T && r.T.boss && !r.dead) { const d = r.pos.distanceTo(p.pos); if (d < bd) { bd = d; boss = r; } }
       ui.boss(boss ? boss.name : null, boss ? boss.hp / boss.maxHp : 0);
+      let anyBoss = null, ad = Infinity;
+      for (const e of this.enemies) if (e.T.boss && !e.dead) { const d = e.pos.distanceTo(p.pos); if (d < ad) { ad = d; anyBoss = e; } }
+      for (const r of this.remotes.values()) if (r.T && r.T.boss && !r.dead) { const d = r.pos.distanceTo(p.pos); if (d < ad) { ad = d; anyBoss = r; } }
+      if (!this.bossBeam) {
+        this.bossBeam = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 600, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3b2b, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+        this.scene.add(this.bossBeam);
+      }
+      this.bossBeam.visible = !!anyBoss;
+      if (anyBoss) {
+        this.bossBeam.position.set(anyBoss.pos.x, anyBoss.pos.y + 310, anyBoss.pos.z);
+        const dx = anyBoss.pos.x - p.pos.x, dz = anyBoss.pos.z - p.pos.z;
+        const ff = Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw));
+        ui.bossArrow(ff - Math.atan2(dx, dz), ad);
+      } else ui.bossArrow(null);
+      ui.parry(p.parryT > 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -829,6 +873,55 @@ if (location.search.includes("autotest")) {
       n.tagThroughWalls = gp.model.tag.material.depthTest === false;
       game.removeOwner('glowpeer');
       log.newAbilities = n;
+    }
+    // round 3: new enemies, boss finder, parry
+    {
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      game.spawnTimer = 999;
+      const c5 = game.world.spawnCandidates(p.pos, 100, 900).sort((a, b) => b.R - a.R)[0];
+      const st5 = c5.pointAt(1, 0.15); st5.y += 0.5;
+      const reset = () => { p.dead = false; p.hp = 9999; p.pos.copy(st5); p.vel.set(0, 0, 0); p.cd = {}; p.parryT = 0; p.shieldT = 0; sim(0.3); };
+      const z = {};
+      const hitsOnMe = {};
+      const oa = p.applyHit.bind(p);
+      p.applyHit = (h) => { hitsOnMe[h.aname + ':' + h.mode] = (hitsOnMe[h.aname + ':' + h.mode] || 0) + 1; return oa(h); };
+      // each new type fights the player for 12 s
+      for (const t of ['bomber', 'magnetron', 'phantom']) {
+        reset();
+        const q = c5.pointAt(1 + Math.PI, 0.55); q.y += 1.5;
+        const e = new Enemy(game, q, t); e.cool = 0.5; e.specialCool = 0.5; game.enemies.push(e);
+        for (let i = 0; i < 12; i++) { sim(1); if (p.dead) p.respawn(); p.hp = 9999; if (i % 3 === 0) { p.pos.copy(st5); p.vel.set(0, 0, 0); } }
+        e.dead = true; e.dispose(); game.enemies = [];
+      }
+      z.hitsOnMe = hitsOnMe;
+      // parry: an enemy pulls me while parrying -> it flies at me and takes 50
+      reset();
+      game.save.abil.parry = true; game.ui.renderAbilities();
+      const en = new Enemy(game, p.pos.clone().add(new THREE.Vector3(0, 0.5, -30)), 'grappler'); en.think = 999; game.enemies.push(en); sim(0.3);
+      p.hp = 100;
+      p.useAbility('parry');
+      const hpBefore = en.hp, dBefore = en.pos.distanceTo(p.pos);
+      p.applyHit({ mode: 'pull', dmg: 10, a: en.pos.toArray(), attacker: en.id, aname: en.name });
+      sim(0.05);
+      z.parry = { myHp: p.hp, enemyDmg: hpBefore - en.hp, enemySpeed: Math.round(en.vel.length()) };
+      sim(0.5); z.parry.enemyDistAfter = Math.round(en.pos.distanceTo(p.pos)); z.parry.distBefore = Math.round(dBefore);
+      // no damage dealt during parry
+      en.hp = 60; game.deliverHit(en.id, { mode: 'latch', dmg: 20, attacker: p.id, aname: 'me' });
+      z.parry.myDmgWhileParrying = 60 - en.hp;
+      sim(2); en.hp = 60; game.deliverHit(en.id, { mode: 'latch', dmg: 20, attacker: p.id, aname: 'me' });
+      z.parry.myDmgAfterParry = 60 - en.hp;
+      z.parry.cooldown = Math.round(p.cd.parry);
+      z.parryButton = !!document.querySelector('#abilities .ab.parry');
+      en.dead = true; en.dispose(); game.enemies = [];
+      // boss arrow + beam
+      const far = p.pos.clone().add(new THREE.Vector3(400, 0, 0));
+      const boss = new Enemy(game, far, 'titan'); boss.think = 999; game.enemies.push(boss);
+      game.hudT = 0; sim(0.2);
+      z.bossArrow = !document.getElementById('bossArrowWrap').classList.contains('hidden') && document.getElementById('bossDist').textContent;
+      z.bossBeam = !!(game.bossBeam && game.bossBeam.visible);
+      boss.dead = true; boss.dispose(); game.enemies = [];
+      p.applyHit = oa; p.hp = 100;
+      log.round3 = z;
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);

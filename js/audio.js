@@ -55,6 +55,7 @@ export class Sfx {
   death() { this.tone(440, 55, 1.0, 'sawtooth', 0.15); }
   cancel() { this.tone(400, 200, 0.1, 'triangle', 0.1); }
   jump() { this.tone(300, 500, 0.1, 'sine', 0.06); }
+  parry() { this.tone(1800, 1200, 0.25, 'square', 0.08); this.tone(2400, 2000, 0.3, 'triangle', 0.1, 0.03); this.hiss(0.12, 6000, 0.25, 2); }
   kill() { this.tone(660, 990, 0.15, 'square', 0.08); this.tone(990, 1320, 0.2, 'square', 0.08, 0.1); }
   // play a sound with distance falloff from the listener position
   near(name, pos) {

@@ -22,7 +22,7 @@ export class Player {
     this.hp = 100; this.dead = false; this.deadT = 0; this.lastAttacker = null;
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
-    this.cd = {}; this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
+    this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -43,7 +43,7 @@ export class Player {
     this.pitch = 0;
     this.lastAttacker = null;
     this.climbT = 0;
-    this.hist.length = 0; this.superShot = 0; this.shieldT = 0; this.glideT = 0;
+    this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -157,6 +157,12 @@ export class Player {
         g.ui.toast(n ? `🧲 Pulled in ${n}!` : '🧲 Nobody in range');
         break;
       }
+      case 'parry':
+        this.parryT = 2; this.parried.clear();
+        _a.copy(this.pos); _a.y += 0.8;
+        g.particles.burst(_a, 0xffd23a, 24, 7, 0.2);
+        g.sfx.parry(); g.ui.toast('⚔️ PARRY!');
+        break;
       case 'shield':
         this.shieldT = 4;
         _a.copy(this.pos); _a.y += 0.8;
@@ -197,6 +203,16 @@ export class Player {
     if (this.dead) return;
     const g = this.game;
     if (inSafeZone(this.pos)) { g.ui.toast('🛡️ Safe zone protected you'); return; }
+    if (this.parryT > 0) {
+      if (hit.attacker && hit.attacker !== this.id && !this.parried.has(hit.attacker)) {
+        this.parried.add(hit.attacker);
+        const pt = this.eye(_b);
+        g.deliverHit(hit.attacker, { mode: 'yank', spd: 120, dmg: 50, parry: true, a: pt.toArray(), attacker: this.id, aname: g.name });
+        g.ui.toast(`⚔️ PARRIED ${hit.aname}!`); g.sfx.parry(); g.shake(0.4);
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xffd23a, 30, 12, 0.25);
+      }
+      return;
+    }
     if (this.shieldT > 0) { g.ui.toast('🛡️ Blocked!'); _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fd3ff, 10, 5, 0.15); return; }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
     this.hp -= hit.dmg || 0;
@@ -204,7 +220,7 @@ export class Player {
     g.hurtFlash(); g.shake(0.5); g.sfx.hurt();
     if (hit.mode === 'pull' || hit.mode === 'yank') {
       _a.fromArray(hit.a);
-      launchTo(this, this.pos, _a, hit.mode === 'yank' ? 44 : 38, hit.mode === 'yank' ? 1 : 3, hit.mode === 'pull');
+      launchTo(this, this.pos, _a, hit.spd || (hit.mode === 'yank' ? 44 : 38), hit.mode === 'yank' ? 1 : 3, hit.mode === 'pull' || !!hit.parry);
       this.climbT = 0;
       g.ui.toast(hit.mode === 'pull' ? `🪝 Hooked by ${hit.aname}!` : `🪝 Yanked by ${hit.aname}!`);
     } else if (hit.mode === 'swap') {
@@ -264,6 +280,7 @@ export class Player {
     this.climbT -= dt;
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
     if (this.shieldT > 0) this.shieldT -= dt;
+    if (this.parryT > 0) this.parryT -= dt;
     if (this.glideT > 0) { this.glideT -= dt; if (this.onGround && this.glideT < 5.7) this.glideT = 0; else if (this.vel.y < -3.5) this.vel.y = -3.5; }
     if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
     this.histT -= dt;

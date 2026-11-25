@@ -31,7 +31,7 @@ export class Enemy {
     this.climbT = 0; this.hitWall = false; this.wallN = { x: 0, z: 0 }; this.wallGap = 0;
     this.maxHp = T.hp; this.hp = T.hp; this.dead = false; this.lastAttacker = null;
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, mode: null, anchor: new V(), t: 0, target: null };
-    this.model = makeCharacter(T.color, { hp: true, angry: true, crown: !!T.boss, name: T.boss ? T.name : null, tagColor: '#ffd0d0' });
+    this.model = makeCharacter(T.color, { hp: true, angry: true, ghost: !!T.ghost, crown: !!T.boss, name: T.boss ? T.name : null, tagColor: '#ffd0d0' });
     this.model.group.scale.setScalar(s);
     game.scene.add(this.model.group);
     this.rope = new Rope(0x7a1a1a, 0.035);
@@ -42,7 +42,7 @@ export class Enemy {
     game.scene.add(this.head);
     this.think = Math.random() * 0.5;
     this.cool = 2 + Math.random() * 2;
-    this.bumpCool = 0; this.slamCool = 4;
+    this.bumpCool = 0; this.slamCool = 4; this.specialCool = 3 + Math.random() * 3;
     this.travelCool = 4 + Math.random() * 8;
     this.moveTarget = null; this.running = false; this.wanderT = 0; this.moving = false;
   }
@@ -61,7 +61,7 @@ export class Enemy {
 
   update(dt) {
     if (this.dead) return;
-    this.cool -= dt; this.slamCool -= dt; this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
+    this.cool -= dt; this.slamCool -= dt; this.specialCool -= dt; this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
     if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
     this.move(dt);
     integrate(this, dt, this.game.world);
@@ -176,6 +176,23 @@ export class Enemy {
       this.pitch = Math.atan2(_a.y, Math.hypot(_a.x, _a.z));
       const T = this.T;
       if (T.boss && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
+      if (T.special === 'magnet' && this.specialCool <= 0 && d < 32) { this.specialCool = T.specialCd; g.enemyMagnet(this); return; }
+      if (T.special === 'blink' && this.specialCool <= 0 && d < 70 && d > 6 && tg.ground) {
+        // teleport right behind the target, then shove them
+        _b.subVectors(tg.pos, me).setY(0).normalize();
+        const bx = tg.pos.x + _b.x * 3, bz = tg.pos.z + _b.z * 3;
+        const gy = w.groundAt(bx, tg.pos.y + 3, bz);
+        if (gy !== null && Math.abs(gy - tg.pos.y) < 4) {
+          this.specialCool = T.specialCd;
+          _c.copy(me); _c.y += 0.7; g.particles.burst(_c, 0x8a9bff, 16, 6, 0.2);
+          me.set(bx, gy + 0.2, bz); this.vel.set(0, 0, 0);
+          _c.copy(me); _c.y += 0.7; g.particles.burst(_c, 0x8a9bff, 16, 6, 0.2);
+          this.yaw = Math.atan2(_b.x, _b.z);
+          this.bumpCool = 0; this.think = 0.15;
+          g.sfx.near('cancel', me);
+          return;
+        }
+      }
       if (d < 2.4 + 0.8 * this.scale && this.bumpCool <= 0) {
         _a.y = 0; _a.normalize();
         g.deliverHit(tg.id, { mode: 'bump', dmg: T.bumpDmg, k: T.bumpK, d: _a.toArray(), attacker: this.id, aname: this.name });
@@ -186,12 +203,13 @@ export class Enemy {
       const sameIsland = tgIsland && tgIsland === this.ground;
       if (h.state === HOOK.IDLE && this.cool <= 0 && d < this.T.range * 0.95 && this.los(tg)) {
         const risky = this.edgeT() > 0.72;
-        const W = T.w, ws = W.swap * (risky ? 1.6 : 1);
-        const r = Math.random() * (W.pull + ws + W.approach);
+        const W = T.w;
+        const opts = [['pull', W.pull], ['swap', W.swap * (risky ? 1.6 : 1)], ['bomb', d > 10 ? W.bomb || 0 : 0], ['approach', W.approach]];
+        let r = Math.random() * opts.reduce((a, o) => a + o[1], 0);
         let mode = null;
-        if (!sameIsland || d > 16) mode = r < W.pull ? 'pull' : r < W.pull + ws ? 'swap' : 'approach';
+        if (!sameIsland || d > 16) { for (const [m, wgt] of opts) { r -= wgt; if (r < 0) { mode = m; break; } } }
         else if (Math.random() < 0.3) mode = W.swap > W.pull ? 'swap' : 'pull';
-        if (mode === 'pull' || mode === 'swap') {
+        if (mode === 'pull' || mode === 'swap' || mode === 'bomb') {
           this.shoot(this.aimAt(tg), mode);
           this.cool = T.cool[0] + Math.random() * (T.cool[1] - T.cool[0]);
           return;
@@ -248,7 +266,11 @@ export class Enemy {
       const step = this.T.hookSpeed * dt;
       const eh = h.mode !== 'travel' ? g.hitTestEntities(h.pos, h.dir, step, this.id, true) : null;
       const wh = g.world.raycast(h.pos, h.dir, step);
-      if (eh && (!wh || eh.dist < wh.dist)) this.onHookHit(eh.ent);
+      if (h.mode === 'bomb' && (eh || wh)) {
+        const at = eh && (!wh || eh.dist < wh.dist) ? eh.ent.pos.clone().setY(eh.ent.pos.y + 0.7) : wh.point.clone();
+        h.pos.copy(at); h.state = HOOK.RETRACT;
+        g.enemyExplode(at, this);
+      } else if (eh && (!wh || eh.dist < wh.dist)) this.onHookHit(eh.ent);
       else if (wh) {
         h.pos.copy(wh.point);
         if (h.mode === 'travel') { h.state = HOOK.ATTACHED; h.t = 0; h.anchor.copy(wh.point); }
@@ -306,7 +328,7 @@ export class Enemy {
     this.cool = Math.min(this.cool, 0.6);
     if (this.T.boss) { /* immovable */ } else if (hit.mode === 'yank' || hit.mode === 'pull') {
       _a.fromArray(hit.a);
-      launchTo(this, this.pos, _a, 44, 1, hit.mode === 'pull');
+      launchTo(this, this.pos, _a, hit.spd || 44, 1, hit.mode === 'pull' || !!hit.parry);
       this.climbT = 0; this.moveTarget = null;
     } else if (hit.mode === 'swap') {
       _a.fromArray(hit.b);

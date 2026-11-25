@@ -1,6 +1,6 @@
 // Service worker: makes Sky Grapple installable and playable offline (solo).
 // Game files are fetched network-first so updates show up right away; the cache is the offline fallback.
-const CACHE = 'skygrapple-v1';
+const CACHE = 'skygrapple-v2';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg',
   'js/main.js', 'js/world.js', 'js/player.js', 'js/enemy.js', 'js/enemytypes.js', 'js/remote.js', 'js/net.js', 'js/input.js',

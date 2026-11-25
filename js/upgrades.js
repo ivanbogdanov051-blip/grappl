@@ -38,5 +38,6 @@ export const ABILITIES = [
   { key: 'glide', icon: '🪂', name: 'Glide', cost: 30, cd: 12, desc: 'Fall slowly and steer freely through the air for 6 seconds.' },
   { key: 'bomb', icon: '💣', name: 'Hook Bomb', cost: 55, cd: 7, desc: 'Fire an exploding hook: up to 40 dmg and big knockback in 9 m. Blast yourself for a rocket jump!' },
   { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
+  { key: 'parry', icon: '⚔️', name: 'PARRY', cost: 200, cd: 10, hk: 'R', desc: 'For 2 seconds nothing can hurt you. Anyone who hits you gets launched at you at super speed and takes 50 damage. (You deal no damage while parrying.)' },
 ];
 export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));
