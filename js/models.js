@@ -166,6 +166,17 @@ export function makeCharacter(color, o = {}) {
       face.add(b);
     }
   }
+  if (o.crown) {
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc83a, metalness: 1, roughness: 0.25, emissive: 0x553300 });
+    const band = new THREE.Mesh(boxGeo, gold);
+    band.scale.set(1.1, 0.16, 1.1); band.position.y = 1.5;
+    bodyG.add(band);
+    for (const [x, z] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45], [0, -0.5], [0, 0.5], [-0.5, 0], [0.5, 0]]) {
+      const sp = new THREE.Mesh(boxGeo, gold);
+      sp.scale.set(0.14, 0.3, 0.14); sp.position.set(x, 1.68, z);
+      bodyG.add(sp);
+    }
+  }
   const gun = makeGun(false);
   gun.group.scale.setScalar(1.7);
   gun.group.position.set(0.85, 0.55, -0.25);

@@ -125,3 +125,16 @@ body.touch .ab { width: 50px; height: 50px; }
 body.touch .ab .ai { font-size: 22px; line-height: 46px; }
 #shopList h3 { margin: 8px 0 0; font-size: 14px; color: #ffd23a; }
 .upg.ability { background: rgba(120,90,255,0.14); }
+
+/* ---------- layering: HUD (ability buttons) above the touch layer, panels above everything */
+#touch { z-index: 4; }
+#hud { z-index: 5; }
+#menu, #shop, #death, #pause { z-index: 10; }
+body.touch #abilities { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: 226px; transform: none; gap: 6px; }
+body.touch .ab { width: 48px; height: 48px; }
+@media (max-height: 500px) { body.touch #abilities { bottom: 196px; } }
+/* ---------- boss bar */
+#bossBar { margin-top: 8px; width: min(420px, 60vw); }
+#bossName { font-weight: 900; font-size: 14px; letter-spacing: 2px; color: #ffd27a; }
+#bossBar .bb { height: 14px; margin-top: 3px; background: rgba(0,0,0,0.5); border: 2px solid rgba(255,210,122,0.7); border-radius: 8px; overflow: hidden; }
+#bossFill { height: 100%; width: 100%; background: linear-gradient(90deg, #8f1414, #ff4b2b); transition: width 0.2s; }

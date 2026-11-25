@@ -64,6 +64,13 @@ export class UI {
     $('speedo').textContent = `${Math.round(p.vel.length())} m/s · alt ${Math.round(p.pos.y)}m`;
     $('safeTag').classList.toggle('hidden', !p.safe);
   }
+  boss(name, frac) {
+    const b = $('bossBar');
+    b.classList.toggle('hidden', !name);
+    if (!name) return;
+    $('bossName').textContent = '👑 ' + name;
+    $('bossFill').style.width = Math.max(0, frac * 100) + '%';
+  }
   shopArrow(angle, dist) {
     const w = $('shopArrowWrap');
     if (angle === null) { w.classList.add('hidden'); return; }

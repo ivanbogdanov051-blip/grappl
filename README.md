@@ -38,6 +38,16 @@ The game is a set of ES modules, so double-clicking `index.html` does **not** wo
 
 Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and do the dangerous **swap**: they fly to you while you get flung to where they were standing. Knocked-off enemies try to grapple back to safety.
 
+## Enemy types
+
+| Enemy | Look | Health | Bounty | Style |
+|---|---|---|---|---|
+| Grappler | red | 60 | 30 | All-rounder: pulls, swaps, grapples around |
+| Zipper | pink, small | 45 | 35 | Fast, attacks often, loves the swap move |
+| Sniper | orange, small | 35 | 35 | Hooks you from up to 170 m away and keeps its distance |
+| Brute | dark red, big | 160 | 50 | Slow but hits hard; its bump sends you flying |
+| **Sky Titan** (boss) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears every few minutes and shows a boss health bar |
+
 ## Rules
 
 - Falling into the clouds kills you. You respawn on the **spawn island** after 5 seconds. Spawn is a safe zone: nobody can hurt you there, you can't hurt anyone from there, and you heal quickly there. Everywhere else your health regenerates slowly once you go 4 seconds without taking damage. Its blue light beam is visible from far away.

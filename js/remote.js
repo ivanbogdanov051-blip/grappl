@@ -1,22 +1,27 @@
 import * as THREE from 'three';
 import { makeCharacter, makeHookHead, Rope } from './models.js';
 import { lerpAngle } from './noise.js';
+import { ENEMY_TYPES } from './enemytypes.js';
 
 const V = THREE.Vector3;
 const _a = new V();
 
 // A player or enemy simulated on another peer's machine; we only display + interpolate it.
 export class Remote {
-  constructor(game, id, kind, name, owner) {
+  constructor(game, id, kind, name, owner, type) {
     this.game = game;
     this.id = id; this.kind = kind; this.name = name; this.owner = owner;
     const isP = kind === 'player';
-    this.model = makeCharacter(isP ? 0x2fd05a : 0xe2372f, { name: isP ? name : null, hp: true, angry: !isP, hpColor: isP ? 0x6dff7a : 0xff4040 });
+    const T = (this.T = isP ? null : ENEMY_TYPES[type] || ENEMY_TYPES.grappler);
+    this.scale = T ? T.scale : 1;
+    if (T) this.name = T.name;
+    this.model = makeCharacter(isP ? 0x2fd05a : T.color, { name: isP ? name : T.boss ? T.name : null, hp: true, angry: !isP, crown: !!(T && T.boss), hpColor: isP ? 0x6dff7a : 0xff4040, tagColor: isP ? '#fff' : '#ffd0d0' });
+    this.model.group.scale.setScalar(this.scale);
     game.scene.add(this.model.group);
     this.rope = new Rope(isP ? 0x1d4d24 : 0x7a1a1a, 0.035);
     game.scene.add(this.rope.mesh);
     this.head = makeHookHead();
-    this.head.scale.setScalar(2.2);
+    this.head.scale.setScalar(2.2 * Math.max(1, this.scale * 0.7));
     this.head.visible = false;
     game.scene.add(this.head);
     this.pos = new V(); this.target = new V(); this.vel = new V();
@@ -39,7 +44,7 @@ export class Remote {
     // [id, x,y,z, vx,vy,vz, yaw, hp, hookState, hx,hy,hz]
     this.target.set(a[1], a[2], a[3]);
     this.vel.set(a[4], a[5], a[6]);
-    this.yawT = a[7]; this.hp = a[8]; this.maxHp = 60;
+    this.yawT = a[7]; this.hp = a[8]; this.maxHp = this.T ? this.T.hp : 60;
     this.setHook(a[9], a[10], a[11], a[12]);
     this.seen();
   }

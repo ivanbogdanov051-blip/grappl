@@ -4,51 +4,55 @@ import { KILL_Y, SAFE_RADIUS, SPAWN } from './world.js';
 import { makeCharacter, makeHookHead, Rope } from './models.js';
 import { HOOK } from './player.js';
 import { lerpAngle } from './noise.js';
+import { ENEMY_TYPES } from './enemytypes.js';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
 const _a = new V(), _b = new V(), _c = new V();
 let counter = 0;
 
-const HOOK_SPEED = 95;
-const RANGE = 95;
 
 // Behaviours: 1 walk (wander), 2 run (chase), 3 grapple-travel to other islands,
 // 4 hook-attack (pulls you to them), 5 travel+attack swap (they fly to you, you get flung to their old spot).
 export class Enemy {
-  constructor(game, pos) {
+  constructor(game, pos, type = 'grappler') {
     this.game = game;
     this.id = game.sid + '#' + counter++;
     this.kind = 'enemy';
-    this.name = 'Grappler';
+    this.type = type;
+    const T = (this.T = ENEMY_TYPES[type] || ENEMY_TYPES.grappler);
+    const s = (this.scale = T.scale);
+    this.name = T.name;
     this.pos = pos.clone();
     this.vel = new V();
     this.yaw = Math.random() * TAU; this.pitch = 0;
-    this.radius = 0.6; this.height = 1.45;
+    this.radius = 0.6 * s; this.height = 1.45 * s;
     this.onGround = false; this.inWater = false; this.ground = null;
     this.climbT = 0; this.hitWall = false; this.wallN = { x: 0, z: 0 }; this.wallGap = 0;
-    this.maxHp = 60; this.hp = 60; this.dead = false; this.lastAttacker = null;
+    this.maxHp = T.hp; this.hp = T.hp; this.dead = false; this.lastAttacker = null;
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, mode: null, anchor: new V(), t: 0, target: null };
-    this.model = makeCharacter(0xe2372f, { hp: true, angry: true });
+    this.model = makeCharacter(T.color, { hp: true, angry: true, crown: !!T.boss, name: T.boss ? T.name : null, tagColor: '#ffd0d0' });
+    this.model.group.scale.setScalar(s);
     game.scene.add(this.model.group);
     this.rope = new Rope(0x7a1a1a, 0.035);
     game.scene.add(this.rope.mesh);
     this.head = makeHookHead();
-    this.head.scale.setScalar(2.2);
+    this.head.scale.setScalar(2.2 * Math.max(1, s * 0.7));
     this.head.visible = false;
     game.scene.add(this.head);
     this.think = Math.random() * 0.5;
     this.cool = 2 + Math.random() * 2;
-    this.bumpCool = 0;
+    this.bumpCool = 0; this.slamCool = 4;
     this.travelCool = 4 + Math.random() * 8;
     this.moveTarget = null; this.running = false; this.wanderT = 0; this.moving = false;
   }
 
   handPos(out) {
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
-    return out.set(this.pos.x + rx * 0.85 - Math.sin(this.yaw) * 0.6, this.pos.y + 0.6, this.pos.z + rz * 0.85 - Math.cos(this.yaw) * 0.6);
+    const s = this.scale;
+    return out.set(this.pos.x + (rx * 0.85 - Math.sin(this.yaw) * 0.6) * s, this.pos.y + 0.6 * s, this.pos.z + (rz * 0.85 - Math.cos(this.yaw) * 0.6) * s);
   }
-  center(out) { return out.set(this.pos.x, this.pos.y + 0.8, this.pos.z); }
+  center(out) { return out.set(this.pos.x, this.pos.y + 0.8 * this.scale, this.pos.z); }
   edgeT() {
     if (!this.ground) return 1;
     const s = this.ground.sample(this.pos.x, this.pos.z);
@@ -57,7 +61,7 @@ export class Enemy {
 
   update(dt) {
     if (this.dead) return;
-    this.cool -= dt; this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
+    this.cool -= dt; this.slamCool -= dt; this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
     if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
     this.move(dt);
     integrate(this, dt, this.game.world);
@@ -93,7 +97,7 @@ export class Enemy {
         if (gnd === null || gnd < this.pos.y - 2.5) { wx = 0; wz = 0; this.moveTarget = null; }
       } else this.moveTarget = null;
     }
-    const sp = this.running ? 10.5 : 5;
+    const sp = this.running ? this.T.run : this.T.walk;
     if (this.onGround) {
       const hs = Math.hypot(this.vel.x, this.vel.z);
       if (hs > sp + 1.5) {
@@ -122,10 +126,10 @@ export class Enemy {
   aimAt(tg) {
     this.handPos(_a);
     const d = _a.distanceTo(tg.pos);
-    const t = d / HOOK_SPEED;
+    const t = d / this.T.hookSpeed;
     const p = new V().copy(tg.pos).addScaledVector(tg.vel, t * 0.85);
     p.y += 0.7;
-    const spread = 0.5 + d * 0.035;
+    const spread = (0.5 + d * 0.035) * (this.T.accuracy || 1);
     p.x += (Math.random() - 0.5) * 2 * spread;
     p.y += (Math.random() - 0.5) * 2 * spread * 0.6;
     p.z += (Math.random() - 0.5) * 2 * spread;
@@ -137,14 +141,14 @@ export class Enemy {
     const w = this.game.world;
     const me = this.pos;
     let best = null, bestScore = Infinity;
-    for (const I of w.islandsInRadius(me.x, me.z, RANGE)) {
+    for (const I of w.islandsInRadius(me.x, me.z, this.T.range)) {
       if (I === this.ground && !recovery) continue;
       if (I.kind === 'spawn' || Math.hypot(I.x - SPAWN.x, I.z - SPAWN.z) < SAFE_RADIUS + 25) continue;
       const a = Math.atan2(me.z - I.z, me.x - I.x);
       const p = I.pointAt(a, I.R < 9 ? 0.3 : 0.72);
       p.y += 0.6;
       const d = p.distanceTo(me);
-      if (d > RANGE * 0.95 || d < 6) continue;
+      if (d > this.T.range * 0.95 || d < 6) continue;
       const score = toward ? p.distanceTo(toward) : recovery ? d + Math.max(0, me.y - p.y) * 0.3 : Math.random() * 100;
       if (score < bestScore) { bestScore = score; best = p; }
     }
@@ -170,33 +174,42 @@ export class Enemy {
       const d = _a.length();
       this.yaw = Math.atan2(-_a.x, -_a.z);
       this.pitch = Math.atan2(_a.y, Math.hypot(_a.x, _a.z));
-      if (d < 3.2 && this.bumpCool <= 0) {
+      const T = this.T;
+      if (T.boss && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
+      if (d < 2.4 + 0.8 * this.scale && this.bumpCool <= 0) {
         _a.y = 0; _a.normalize();
-        g.deliverHit(tg.id, { mode: 'bump', dmg: 8, d: _a.toArray(), attacker: this.id, aname: this.name });
+        g.deliverHit(tg.id, { mode: 'bump', dmg: T.bumpDmg, k: T.bumpK, d: _a.toArray(), attacker: this.id, aname: this.name });
         this.bumpCool = 1.3;
         return;
       }
       const tgIsland = tg.ground || null;
       const sameIsland = tgIsland && tgIsland === this.ground;
-      if (h.state === HOOK.IDLE && this.cool <= 0 && d < RANGE * 0.95 && this.los(tg)) {
+      if (h.state === HOOK.IDLE && this.cool <= 0 && d < this.T.range * 0.95 && this.los(tg)) {
         const risky = this.edgeT() > 0.72;
-        const r = Math.random();
+        const W = T.w, ws = W.swap * (risky ? 1.6 : 1);
+        const r = Math.random() * (W.pull + ws + W.approach);
         let mode = null;
-        if (!sameIsland || d > 16) mode = r < 0.42 ? 'pull' : r < (risky ? 0.85 : 0.66) ? 'swap' : 'approach';
-        else if (r < 0.3) mode = 'pull';
+        if (!sameIsland || d > 16) mode = r < W.pull ? 'pull' : r < W.pull + ws ? 'swap' : 'approach';
+        else if (Math.random() < 0.3) mode = W.swap > W.pull ? 'swap' : 'pull';
         if (mode === 'pull' || mode === 'swap') {
           this.shoot(this.aimAt(tg), mode);
-          this.cool = 2.2 + Math.random() * 2.5;
+          this.cool = T.cool[0] + Math.random() * (T.cool[1] - T.cool[0]);
           return;
         }
         if (mode === 'approach' && tgIsland && tgIsland.kind !== 'spawn') {
           const a = Math.atan2(me.z - tgIsland.z, me.x - tgIsland.x);
           const p = tgIsland.pointAt(a + (Math.random() - 0.5) * 0.6, 0.65);
           p.y += 0.6;
-          if (p.distanceTo(me) < RANGE * 0.95) { this.shoot(p, 'travel'); this.cool = 1.2; return; }
+          if (p.distanceTo(me) < this.T.range * 0.95) { this.shoot(p, 'travel'); this.cool = 1.2; return; }
         }
       }
-      if (sameIsland) { this.moveTarget = tg.pos.clone(); this.running = true; }
+      if (T.keepAway && d < T.keepAway && h.state === HOOK.IDLE && this.travelCool <= 0) {
+        const away = me.clone().addScaledVector(_b.subVectors(me, tg.pos).setY(0).normalize(), 90);
+        const p = this.findIslandPoint(away, false);
+        this.travelCool = 4;
+        if (p) { this.shoot(p, 'travel'); return; }
+      }
+      if (sameIsland && !T.keepAway) { this.moveTarget = tg.pos.clone(); this.running = true; }
       else if (h.state === HOOK.IDLE && this.travelCool <= 0) {
         const p = this.findIslandPoint(tg.pos, false);
         if (p && p.distanceTo(tg.pos) < me.distanceTo(tg.pos) - 10) { this.shoot(p, 'travel'); this.travelCool = 3 + Math.random() * 3; return; }
@@ -232,7 +245,7 @@ export class Enemy {
   updateHook(dt) {
     const h = this.hook, g = this.game;
     if (h.state === HOOK.FLYING) {
-      const step = HOOK_SPEED * dt;
+      const step = this.T.hookSpeed * dt;
       const eh = h.mode !== 'travel' ? g.hitTestEntities(h.pos, h.dir, step, this.id, true) : null;
       const wh = g.world.raycast(h.pos, h.dir, step);
       if (eh && (!wh || eh.dist < wh.dist)) this.onHookHit(eh.ent);
@@ -243,7 +256,7 @@ export class Enemy {
       } else {
         h.pos.addScaledVector(h.dir, step);
         h.dist += step;
-        if (h.dist > RANGE) h.state = HOOK.RETRACT;
+        if (h.dist > this.T.range) h.state = HOOK.RETRACT;
       }
     } else if (h.state === HOOK.ATTACHED) {
       h.t += dt;
@@ -274,11 +287,11 @@ export class Enemy {
     h.state = HOOK.LATCHED; h.target = ent.id; h.t = 0;
     if (h.mode === 'pull') {
       _a.copy(this.pos); _a.y += 1.2;
-      g.deliverHit(ent.id, { mode: 'pull', dmg: 10, a: _a.toArray(), attacker: this.id, aname: this.name });
+      g.deliverHit(ent.id, { mode: 'pull', dmg: Math.round(10 * this.T.dmg), a: _a.toArray(), attacker: this.id, aname: this.name });
     } else if (h.mode === 'swap') {
       const mine = this.pos.clone(); mine.y += 0.5;
       const theirs = ent.pos.clone(); theirs.y += 1;
-      g.deliverHit(ent.id, { mode: 'swap', dmg: 15, b: mine.toArray(), attacker: this.id, aname: this.name });
+      g.deliverHit(ent.id, { mode: 'swap', dmg: Math.round(15 * this.T.dmg), b: mine.toArray(), attacker: this.id, aname: this.name });
       launchTo(this, this.pos, theirs, 45, 3, true);
       this.climbT = 1;
     }
@@ -291,7 +304,7 @@ export class Enemy {
     this.hp -= hit.dmg || 0;
     this.model.hit();
     this.cool = Math.min(this.cool, 0.6);
-    if (hit.mode === 'yank' || hit.mode === 'pull') {
+    if (this.T.boss) { /* immovable */ } else if (hit.mode === 'yank' || hit.mode === 'pull') {
       _a.fromArray(hit.a);
       launchTo(this, this.pos, _a, 44, 1, hit.mode === 'pull');
       this.climbT = 0; this.moveTarget = null;

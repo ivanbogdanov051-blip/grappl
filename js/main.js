@@ -12,6 +12,7 @@ import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope } from './models.js';
 import { computeStats, COSTS, MAX_LEVEL, ABILITY } from './upgrades.js';
+import { ENEMY_TYPES, ENEMY_KEYS } from './enemytypes.js';
 
 window.__errs = [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -244,6 +245,24 @@ class Game {
     this.sfx.init();
     this.player.useAbility(key);
   }
+  bossSlam(e) {
+    const c = e.pos;
+    const hit = (ent) => {
+      if (ent.dead) return;
+      const dx = ent.pos.x - c.x, dy = ent.pos.y - c.y, dz = ent.pos.z - c.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 18) return;
+      const l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(ent.id, { mode: 'bump', dmg: 25, d: [dx / l, 0, dz / l], k: 1.2 + 1.6 * (1 - d / 18), attacker: e.id, aname: e.name });
+    };
+    hit(this.player);
+    for (const r of this.remotes.values()) if (r.kind === 'player') hit(r);
+    _v.copy(c); _v.y += 0.5;
+    this.particles.burst(_v, 0xff6a3a, 40, 18, 0.5);
+    this.particles.burst(_v, 0x5a4a3a, 25, 12, 0.4);
+    if (c.distanceTo(this.player.pos) < 60) this.shake(0.7);
+    this.sfx.near('thunk', c); this.sfx.near('hurt', c);
+  }
   shockwave(p) {
     const c = p.pos;
     const hit = (ent) => {
@@ -294,13 +313,14 @@ class Game {
     let best = null, bd = len;
     const test = (ent) => {
       if (ent.dead || ent.id === exclude) return;
-      _w.copy(ent.pos); _w.y += 0.7;
+      const sc = ent.scale || 1;
+      _w.copy(ent.pos); _w.y += 0.7 * sc;
       _v.subVectors(_w, o);
       const t = _v.dot(dir);
       if (t < -1.2 || t > bd + 1.2) return;
       const tt = Math.max(0, Math.min(bd, t));
       const px = o.x + dir.x * tt - _w.x, py = o.y + dir.y * tt - _w.y, pz = o.z + dir.z * tt - _w.z;
-      if (px * px + py * py + pz * pz < 1.15 * 1.15) { bd = tt; best = ent; }
+      if (px * px + py * py + pz * pz < 1.32 * sc * sc) { bd = tt; best = ent; }
     };
     test(this.player);
     if (!playersOnly) for (const e of this.enemies) test(e);
@@ -335,10 +355,11 @@ class Game {
   }
   onEnemyDeath(e) {
     const la = e.lastAttacker;
-    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, 'Grappler', 'enemy');
+    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward);
+    if (e.T.boss) this.ui.feed('👑 The Sky Titan has fallen!', 'me');
   }
-  reportKill(killer, kname, vname, vkind) {
-    const m = { t: 'kill', killer, kname, vname, vkind };
+  reportKill(killer, kname, vname, vkind, reward) {
+    const m = { t: 'kill', killer, kname, vname, vkind, reward };
     this.handleKill(m);
     if (this.net) this.net.send(m);
   }
@@ -346,18 +367,32 @@ class Game {
     const mine = m.killer === this.player.id;
     this.ui.feed(`${m.kname} ⚔ ${m.vname}`, mine ? 'me' : m.vkind === 'player' ? 'pk' : '');
     if (mine) {
-      const reward = m.vkind === 'player' ? 50 : 30;
+      const reward = m.reward || (m.vkind === 'player' ? 50 : 30);
       this.addCoins(reward);
       this.sfx.kill();
-      this.ui.toast(`+${reward} 🪙  ${m.vkind === 'player' ? 'Player' : 'Grappler'} eliminated!`);
+      this.ui.toast(`+${reward} 🪙  ${m.vname} eliminated!`);
     }
   }
   manageEnemies() {
     const p = this.player;
     const cap = this.quality === 'high' ? 10 : 7;
-    for (const e of this.enemies) if (e.pos.distanceTo(p.pos) > 750 && !e.dead) { e.dead = true; e.dispose(); }
+    for (const e of this.enemies) if (e.pos.distanceTo(p.pos) > (e.T.boss ? 1100 : 750) && !e.dead) { e.dead = true; e.dispose(); }
     this.enemies = this.enemies.filter((e) => !e.dead);
     if (p.dead) return;
+    // boss: roughly every 2-3 minutes, if none is around
+    this.bossT = (this.bossT === undefined ? 70 : this.bossT) - 1.5;
+    if (this.bossT <= 0) {
+      this.bossT = 120 + Math.random() * 60;
+      const has = this.enemies.some((e) => e.T.boss) || [...this.remotes.values()].some((r) => r.T && r.T.boss);
+      const big = this.world.spawnCandidates(p.pos, 140, 450).filter((I) => I.R >= 40);
+      if (!has && big.length) {
+        const I = big[Math.floor(Math.random() * big.length)];
+        const bp = I.pointAt(Math.random() * TAU, 0.3); bp.y += 2;
+        this.enemies.push(new Enemy(this, bp, 'titan'));
+        this.ui.toast('⚠️ A SKY TITAN has appeared!');
+        this.ui.feed('👑 Sky Titan spotted nearby: 300 coins bounty', 'pk');
+      }
+    }
     let near = this.enemies.length;
     for (const r of this.remotes.values()) if (r.kind === 'enemy' && r.pos.distanceTo(p.pos) < 500) near++;
     if (near >= cap) return;
@@ -366,7 +401,9 @@ class Game {
     const I = cands[Math.floor(Math.random() * cands.length)];
     const pt = I.pointAt(Math.random() * TAU, Math.random() * 0.6);
     pt.y += 1;
-    this.enemies.push(new Enemy(this, pt));
+    let roll = Math.random() * ENEMY_KEYS.reduce((a, k) => a + ENEMY_TYPES[k].spawn, 0), type = 'grappler';
+    for (const k of ENEMY_KEYS) { roll -= ENEMY_TYPES[k].spawn; if (roll < 0) { type = k; break; } }
+    this.enemies.push(new Enemy(this, pt, type));
   }
 
   // ---------------------------------------------------------- network
@@ -410,7 +447,7 @@ class Game {
           const id = es[0];
           seen.add(id);
           let re = this.remotes.get(id);
-          if (!re) { re = new Remote(this, id, 'enemy', 'Grappler', ps.id); this.remotes.set(id, re); }
+          if (!re) { re = new Remote(this, id, 'enemy', 'Grappler', ps.id, es[13]); this.remotes.set(id, re); }
           re.applyEnemy(es);
         }
         for (const [id, re] of this.remotes) {
@@ -443,7 +480,7 @@ class Game {
     for (const e of this.enemies) {
       if (e.dead) continue;
       const eh = e.hook;
-      es.push([e.id, r2(e.pos.x), r2(e.pos.y), r2(e.pos.z), r2(e.vel.x), r2(e.vel.y), r2(e.vel.z), r2(e.yaw), Math.round(e.hp), eh.state, r2(eh.pos.x), r2(eh.pos.y), r2(eh.pos.z)]);
+      es.push([e.id, r2(e.pos.x), r2(e.pos.y), r2(e.pos.z), r2(e.vel.x), r2(e.vel.y), r2(e.vel.z), r2(e.yaw), Math.round(e.hp), eh.state, r2(eh.pos.x), r2(eh.pos.y), r2(eh.pos.z), e.type]);
     }
     this.net.send({ t: 's', p: ps, e: es });
   }
@@ -566,6 +603,10 @@ class Game {
     if (this.hudT <= 0) {
       this.hudT = 0.1;
       ui.hud(p, this);
+      let boss = null, bd = 220;
+      for (const e of this.enemies) if (e.T.boss && !e.dead) { const d = e.pos.distanceTo(p.pos); if (d < bd) { bd = d; boss = e; } }
+      for (const r of this.remotes.values()) if (r.T && r.T.boss && !r.dead) { const d = r.pos.distanceTo(p.pos); if (d < bd) { bd = d; boss = r; } }
+      ui.boss(boss ? boss.name : null, boss ? boss.hp / boss.maxHp : 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -679,6 +720,32 @@ if (location.search.includes("autotest")) {
       ab.buttons = document.querySelectorAll('#abilities .ab').length;
       log.abilities = ab;
       p.hp = 40; p.lastHurt = game.time; sim(3); const r1 = Math.round(p.hp); sim(3); log.regen = { after3s: r1, after6s: Math.round(p.hp) };
+    }
+    // enemy types + boss
+    {
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      const c3 = game.world.spawnCandidates(p.pos, 100, 900).sort((a, b) => b.R - a.R)[0];
+      const st3 = c3.pointAt(0, 0.05);
+      p.dead = false; p.hp = 9999; p.pos.set(st3.x, st3.y + 0.5, st3.z); p.vel.set(0, 0, 0); sim(0.3);
+      const per = {};
+      const types = ['zipper', 'sniper', 'brute', 'titan'];
+      types.forEach((t, i) => { const q = c3.pointAt(i * 1.5, 0.5); q.y += 2; const e = new Enemy(game, q, t); game.enemies.push(e); per[e.id] = t; });
+      const shots = {}, slams = { n: 0 };
+      const os2 = Enemy.prototype.shoot;
+      Enemy.prototype.shoot = function (pt, mode) { const k = this.type + ':' + mode; shots[k] = (shots[k] || 0) + 1; return os2.call(this, pt, mode); };
+      const obs = game.bossSlam.bind(game); game.bossSlam = (e) => { slams.n++; return obs(e); };
+      game.spawnTimer = 999;
+      for (let i = 0; i < 20; i++) { sim(1); if (p.dead) { p.respawn(); } p.hp = 9999; if (i % 4 === 0) { p.pos.set(st3.x, st3.y + 0.5, st3.z); p.vel.set(0, 0, 0); } }
+      // bring the titan next to the player to test its slam
+      const ti = game.enemies.find((e) => e.type === 'titan');
+      if (ti) { ti.pos.copy(p.pos).add(new THREE.Vector3(6, 0.5, 0)); ti.slamCool = 0; ti.think = 0; ti.vel.set(0, 0, 0); sim(1.5); }
+      log.types = { shots, slams: slams.n, alive: game.enemies.map((e) => e.type + ':' + e.hp + '/' + e.maxHp), bossBar: !document.getElementById('bossBar').classList.contains('hidden') };
+      // a remote titan must render with the right type
+      game.onNet({ t: 's', p: { id: 'fakepeer', n: 'Bob', x: st3.x + 30, y: st3.y, z: st3.z, vx: 0, vy: 0, vz: 0, yw: 0, pt: 0, hp: 100, mh: 100, d: 0, hs: 0, hx: 0, hy: 0, hz: 0 }, e: [['fakepeer#0', st3.x + 40, st3.y, st3.z, 0, 0, 0, 0, 500, 0, 0, 0, 0, 'titan']] });
+      const rt = game.remotes.get('fakepeer#0');
+      log.remoteTitan = rt ? [rt.name, rt.scale, rt.maxHp] : null;
+      game.removeOwner('fakepeer');
+      p.hp = 100;
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);
