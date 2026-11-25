@@ -200,7 +200,14 @@ class Game {
     else { try { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
     this.ui.toast(isTouch ? 'Aim with the right side · SHOOT your hook, then PULL!' : 'Click to SHOOT your hook, click again to PULL!');
   }
+  sens() { return this.save.sens || 1; }
   pause() { if (!this.running) return; this.ui.showPause(true); }
+  onLockError() {
+    // browsers refuse to re-lock the mouse for ~1s after Esc: keep the pause menu up so Resume can be clicked again
+    if (!this.running || isTouch || this.shopOpen) return;
+    this.ui.showPause(true);
+    this.ui.toast('Click Resume again to look around');
+  }
   resume() { this.ui.showPause(false); if (!isTouch) this.input.lock(); }
   onLockChange(locked) {
     if (!this.running || isTouch) return;
@@ -210,7 +217,7 @@ class Game {
 
   // ---------------------------------------------------------- actions
   look(dx, dy) {
-    if (this.shopOpen) return;
+    if (this.shopOpen || !this.running) return;
     const p = this.player;
     p.yaw -= dx;
     p.pitch = Math.max(-1.5, Math.min(1.5, p.pitch - dy));

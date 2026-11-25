@@ -33,12 +33,17 @@ export class Input {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousemove', (e) => {
       if (!this.locked) return;
-      game.look(e.movementX * 0.0022, e.movementY * 0.0022);
+      let dx = e.movementX, dy = e.movementY;
+      // some browsers report a huge bogus jump right after locking: ignore it
+      if (Math.abs(dx) > 400 || Math.abs(dy) > 400) return;
+      const s = 0.0022 * game.sens();
+      game.look(dx * s, dy * s * (game.save.invertY ? -1 : 1));
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
       game.onLockChange(this.locked);
     });
+    document.addEventListener('pointerlockerror', () => { this.locked = false; game.onLockError(); });
     if (isTouch) this.setupTouch();
   }
 
@@ -56,8 +61,26 @@ export class Input {
     const knob = document.getElementById('stickKnob');
     let stickId = null, sx = 0, sy = 0, lookId = null, lx = 0, ly = 0;
     const MAX = 55;
+    const releaseStick = () => {
+      stickId = null; this.stick.x = 0; this.stick.y = 0; this.stickMag = 0;
+      base.classList.remove('active');
+    };
+    // A finger whose touchend got lost (notification, panel popping up, OS gesture...) used to keep
+    // the look slot "taken" forever, so the camera stopped turning. Drop any id that is no longer on screen.
+    const reconcile = (e) => {
+      const alive = new Set([...e.touches].map((t) => t.identifier));
+      if (lookId !== null && !alive.has(lookId)) lookId = null;
+      if (stickId !== null && !alive.has(stickId)) releaseStick();
+    };
+    this.resetTouch = () => { lookId = null; releaseStick(); };
+    addEventListener('blur', this.resetTouch);
+    document.addEventListener('visibilitychange', this.resetTouch);
+    // watch every touch on the page, not just the layer, so ends that land elsewhere are still seen
+    document.addEventListener('touchend', reconcile, true);
+    document.addEventListener('touchcancel', reconcile, true);
     layer.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      reconcile(e);
       for (const t of e.changedTouches) {
         if (t.clientX < innerWidth * 0.45 && stickId === null) {
           stickId = t.identifier; sx = t.clientX; sy = t.clientY;
@@ -79,19 +102,21 @@ export class Input {
           this.stick.x = (dx * k) / MAX;
           this.stick.y = (-dy * k) / MAX;
           this.stickMag = Math.min(1, l / MAX);
+        } else if (lookId === null && t.identifier !== stickId && t.clientX >= innerWidth * 0.45) {
+          lookId = t.identifier; lx = t.clientX; ly = t.clientY;
         } else if (t.identifier === lookId) {
-          g.look((t.clientX - lx) * 0.0058, (t.clientY - ly) * 0.0058);
+          const s = 0.0058 * g.sens();
+          g.look((t.clientX - lx) * s, (t.clientY - ly) * s * (g.save.invertY ? -1 : 1));
           lx = t.clientX; ly = t.clientY;
         }
       }
     }, { passive: false });
     const end = (e) => {
       for (const t of e.changedTouches) {
-        if (t.identifier === stickId) {
-          stickId = null; this.stick.x = 0; this.stick.y = 0; this.stickMag = 0;
-          base.classList.remove('active');
-        } else if (t.identifier === lookId) lookId = null;
+        if (t.identifier === stickId) releaseStick();
+        else if (t.identifier === lookId) lookId = null;
       }
+      reconcile(e);
     };
     layer.addEventListener('touchend', end);
     layer.addEventListener('touchcancel', end);

@@ -9,6 +9,19 @@ export class UI {
     document.body.classList.toggle('touch', isTouch);
     $('nameInput').value = game.save.name || 'Sky' + Math.floor(Math.random() * 900 + 100);
     $('quality').value = game.quality;
+    for (const id of ['sens', 'sens2']) {
+      const el = $(id);
+      el.value = game.sens();
+      el.oninput = () => {
+        game.save.sens = Math.round(parseFloat(el.value) * 10) / 10;
+        this.syncSens(); game.persist();
+      };
+    }
+    for (const id of ['invertY', 'invertY2']) {
+      $(id).checked = !!game.save.invertY;
+      $(id).onchange = (e) => { game.save.invertY = e.target.checked; this.syncSens(); game.persist(); };
+    }
+    this.syncSens();
     $('quality').onchange = (e) => { game.save.quality = e.target.value; game.persist(); location.reload(); };
     $('playSolo').onclick = () => game.start('solo');
     $('playPublic').onclick = () => game.start('public');
@@ -31,6 +44,12 @@ export class UI {
     $('toMenu').onclick = () => location.reload();
     $('netInfo').onclick = () => game.copyInvite();
   }
+  syncSens() {
+    const v = this.g.sens();
+    for (const id of ['sens', 'sens2']) $(id).value = v;
+    for (const id of ['sensVal', 'sensVal2']) $(id).textContent = v.toFixed(1) + '×';
+    for (const id of ['invertY', 'invertY2']) $(id).checked = !!this.g.save.invertY;
+  }
   name() { return $('nameInput').value.trim(); }
   menuStatus(t) { $('menuStatus').textContent = t; }
   showMenu(v) { $('menu').classList.toggle('hidden', !v); }
@@ -38,7 +57,10 @@ export class UI {
     $('hud').classList.toggle('hidden', !v);
     $('touch').classList.toggle('hidden', !(v && this.touch));
   }
-  showPause(v) { $('pause').classList.toggle('hidden', !v); }
+  showPause(v) {
+    $('pause').classList.toggle('hidden', !v);
+    if (v && this.g.input && this.g.input.resetTouch) this.g.input.resetTouch();
+  }
 
   setHook(st) {
     if (st === this._hs) return;

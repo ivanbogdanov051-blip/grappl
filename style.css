@@ -162,3 +162,8 @@ body.touch .ab.parry .ai { font-size: 26px; line-height: 58px; }
 body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162px; bottom: auto; transform: none; gap: 5px; }
 .upg.rare { background: rgba(255,170,30,0.13); }
 .upg.rare button { font-size: 11px; min-width: 120px; }
+
+.sensbox { display: flex; align-items: center; gap: 8px; }
+.sensbox b { min-width: 38px; text-align: right; font-size: 14px; }
+.panel input[type=range] { padding: 0; width: 150px; accent-color: #4f9dff; background: none; border: none; height: 28px; }
+.panel input[type=checkbox] { width: 22px; height: 22px; accent-color: #4f9dff; padding: 0; }
