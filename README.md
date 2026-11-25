@@ -53,7 +53,10 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | Bomber | orange | 70 | 40 | Throws exploding hooks (up to 32 damage, knockback) |
 | Magnetron | purple | 90 | 45 | Every 7 s yanks every player within 32 m to itself |
 | Phantom | see-through blue | 50 | 45 | Teleports right behind you, then shoves you |
-| **Sky Titan** (boss) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
+| 👑 **Thunder King** (boss) | blue giant | 850 | 300 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
+| 👑 **Void Maw** (boss) | black-purple giant | 1000 | 350 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
+| 👑 **Hive Queen** (boss) | gold giant | 750 | 300 | Exploding hooks and summons Zippers/Bombers. Drops **🐝 Hive Missiles** |
+| **Sky Titan** (boss, drops 🌋 Titan Slam) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
 
 ## Rules
 
@@ -76,6 +79,17 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | 9 | 💣 Hook Bomb | 7 s | An exploding hook: up to 40 damage and knockback in 9 m. Blast yourself for a rocket jump |
 | 0 | 💚 Heal | 20 s | Restores 50 health instantly |
 | R | ⚔️ **PARRY** (200 coins) | 10 s | For 2 s you can't be hurt, and anyone who hits you gets launched at you at super speed and takes 50 damage. You deal no damage while parrying |
+
+## Rare abilities (boss drops)
+
+Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock that boss's rare ability; if you already have it you get 150 coins instead.
+
+| Key | Ability | Cooldown | Dropped by |
+|---|---|---|---|
+| C | 🌋 Titan Slam: 35 damage and huge knockback within 18 m | 12 s | Sky Titan |
+| V | ⚡ Thunder Strike: lightning where you aim, up to 45 damage | 10 s | Thunder King |
+| B | 🌀 Black Hole: sucks everyone in for 3 s, then bursts | 18 s | Void Maw |
+| N | 🐝 Hive Missiles: 4 homing stingers, 30 damage each | 14 s | Hive Queen |
 
 ## Multiplayer
 

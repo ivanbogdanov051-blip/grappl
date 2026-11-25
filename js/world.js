@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rng, hash2, fbm, vnoise, smoothstep, clamp } from './noise.js';
 import { makeCharacter, makeTextSprite } from './models.js';
+import { applyDetail, applyWind } from './realism.js';
 
 export const CHUNK = 240;
 export const SEED = 424242;
@@ -496,7 +497,7 @@ function makeMaterials(uTime) {
   return {
     terrain: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }),
     trunk: new THREE.MeshStandardMaterial({ color: 0x5b3e27, roughness: 1 }),
-    leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }),
+    leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }),
     rock: new THREE.MeshStandardMaterial({ color: 0x7c7770, roughness: 0.95, flatShading: true }),
     bush: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
     struct: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }),
@@ -506,12 +507,25 @@ function makeMaterials(uTime) {
     crystal: new THREE.MeshStandardMaterial({ color: 0x66ccff, emissive: 0x2299ff, emissiveIntensity: 1.6, roughness: 0.2 }),
   };
 }
+function rockGeometry() {
+  let g = new THREE.IcosahedronGeometry(1, 2);
+  g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  g = mergeVertices(g);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + vnoise(x * 2.1 + 7, z * 2.1 + y * 1.7, 99) * 0.22 + vnoise(x * 5 + 3, y * 5 - z, 77) * 0.07;
+    p.setXYZ(i, x * k, y * k * 0.8, z * k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 function makeGeos() {
   return {
     trunk: new THREE.CylinderGeometry(0.7, 1, 1, 7).translate(0, 0.5, 0),
     cone: new THREE.ConeGeometry(1, 1, 8).translate(0, 0.5, 0),
     blob: new THREE.IcosahedronGeometry(1, 1),
-    rock: new THREE.DodecahedronGeometry(1, 0),
+    rock: rockGeometry(),
     bush: new THREE.IcosahedronGeometry(1, 0),
     coin: new THREE.CylinderGeometry(0.5, 0.5, 0.12, 18).rotateX(Math.PI / 2),
     crystal: new THREE.OctahedronGeometry(1, 0),
@@ -574,6 +588,10 @@ export class World {
     this.time = 0;
     this.uTime = { value: 0 };
     this.mats = makeMaterials(this.uTime);
+    applyDetail(this.mats.terrain, 0.5);
+    applyDetail(this.mats.struct, 0.35);
+    applyWind(this.mats.leaf, this.uTime, 0.035, 1.0);
+    applyWind(this.mats.bush, this.uTime, 0.03, 1.0);
     this.geos = makeGeos();
     this._near = [];
     this._rc = [];
@@ -899,8 +917,8 @@ export class World {
     _q.identity();
     if (nT) {
       const trunks = new THREE.InstancedMesh(GE.trunk, M.trunk, nT);
-      const pines = nP ? new THREE.InstancedMesh(GE.cone, M.leaf, nP * 2) : null;
-      const blobs = nB ? new THREE.InstancedMesh(GE.blob, M.leaf, nB) : null;
+      const pines = nP ? new THREE.InstancedMesh(GE.cone, M.leaf, nP * 3) : null;
+      const blobs = nB ? new THREE.InstancedMesh(GE.blob, M.leaf, nB * 3) : null;
       let it = 0, ip = 0, ib = 0;
       for (const I of islands) for (const t of I.trees) {
         _q.identity();
@@ -910,13 +928,20 @@ export class World {
           _c.setHSL(0.3 + t.c * 0.05, 0.45, 0.17 + t.c * 0.07, THREE.SRGBColorSpace);
           _m.compose(_p.set(t.x, t.y + t.h * 0.25, t.z), _q, _s.set(t.fr, t.h * 0.55, t.fr));
           pines.setMatrixAt(ip, _m); pines.setColorAt(ip++, _c);
-          _m.compose(_p.set(t.x, t.y + t.h * 0.55, t.z), _q, _s.set(t.fr * 0.7, t.h * 0.47, t.fr * 0.7));
-          pines.setMatrixAt(ip, _m); pines.setColorAt(ip++, _c);
+          _m.compose(_p.set(t.x, t.y + t.h * 0.5, t.z), _q, _s.set(t.fr * 0.74, t.h * 0.42, t.fr * 0.74));
+          pines.setMatrixAt(ip, _m); pines.setColorAt(ip++, _c.multiplyScalar(1.08));
+          _m.compose(_p.set(t.x, t.y + t.h * 0.72, t.z), _q, _s.set(t.fr * 0.45, t.h * 0.32, t.fr * 0.45));
+          pines.setMatrixAt(ip, _m); pines.setColorAt(ip++, _c.multiplyScalar(1.08));
         } else {
           _c.setHSL(0.22 + t.c * 0.08, 0.5, 0.25 + t.c * 0.09, THREE.SRGBColorSpace);
           _q.setFromEuler(_e.set(0, t.c * TAU, 0));
           _m.compose(_p.set(t.x, t.y + t.h * 0.72, t.z), _q, _s.set(t.fr, t.fr * 0.85, t.fr));
           blobs.setMatrixAt(ib, _m); blobs.setColorAt(ib++, _c);
+          const oa = t.c * TAU;
+          _m.compose(_p.set(t.x + Math.cos(oa) * t.fr * 0.6, t.y + t.h * 0.62, t.z + Math.sin(oa) * t.fr * 0.6), _q, _s.set(t.fr * 0.7, t.fr * 0.6, t.fr * 0.7));
+          blobs.setMatrixAt(ib, _m); blobs.setColorAt(ib++, _c.multiplyScalar(0.9));
+          _m.compose(_p.set(t.x - Math.cos(oa) * t.fr * 0.45, t.y + t.h * 0.86, t.z - Math.sin(oa) * t.fr * 0.45), _q, _s.set(t.fr * 0.62, t.fr * 0.55, t.fr * 0.62));
+          blobs.setMatrixAt(ib, _m); blobs.setColorAt(ib++, _c.multiplyScalar(1.25));
         }
       }
       addInst(trunks);

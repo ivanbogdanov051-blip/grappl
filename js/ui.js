@@ -130,8 +130,8 @@ export class UI {
   hideDeath() { $('death').classList.add('hidden'); }
 
   renderAbilities() {
-    const g = this.g, bar = $('abilities');
-    bar.innerHTML = '';
+    const g = this.g, bar = $('abilities'), rareBar = $('rareAbilities');
+    bar.innerHTML = ''; rareBar.innerHTML = '';
     this.abBtns = {};
     ABILITIES.forEach((A, i) => {
       if (!g.save.abil[A.key]) return;
@@ -142,7 +142,8 @@ export class UI {
       const fire = (e) => { e.preventDefault(); e.stopPropagation(); g.useAbility(A.key); };
       b.addEventListener('touchstart', fire, { passive: false });
       b.addEventListener('mousedown', fire);
-      bar.appendChild(b);
+      (A.rare ? rareBar : bar).appendChild(b);
+      if (A.rare) b.classList.add('rare');
       this.abBtns[A.key] = { b, cd: b.querySelector('.acd'), max: A.cd };
     });
   }
@@ -184,6 +185,7 @@ export class UI {
     h.textContent = 'Abilities: buy once, then use their button (PC keys 1–9, 0 and R)';
     list.appendChild(h);
     ABILITIES.forEach((A, i) => {
+      if (A.rare) return;
       const owned = !!g.save.abil[A.key];
       const row = document.createElement('div');
       row.className = 'upg ability';
@@ -195,5 +197,20 @@ export class UI {
       row.appendChild(b);
       list.appendChild(row);
     });
+    const h2 = document.createElement('h3');
+    h2.textContent = '👑 Rare abilities: only dropped by bosses';
+    list.appendChild(h2);
+    for (const A of ABILITIES) {
+      if (!A.rare) continue;
+      const owned = !!g.save.abil[A.key];
+      const row = document.createElement('div');
+      row.className = 'upg ability rare';
+      row.innerHTML = `<div class="uinfo"><div class="un">${A.icon} ${A.name} <span class="pips">key ${A.hk} · ${A.cd}s cooldown</span></div><div class="ud">${A.desc}</div></div>`;
+      const b = document.createElement('button');
+      b.textContent = owned ? 'OWNED' : 'Drops from ' + A.rare;
+      b.disabled = true;
+      row.appendChild(b);
+      list.appendChild(row);
+    }
   }
 }

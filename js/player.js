@@ -157,6 +157,38 @@ export class Player {
         g.ui.toast(n ? `🧲 Pulled in ${n}!` : '🧲 Nobody in range');
         break;
       }
+      case 'titanslam':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        g.shockwave(this, 18, 35, 1.5);
+        _a.copy(this.pos); _a.y += 0.3;
+        g.particles.burst(_a, 0xff7a2a, 40, 16, 0.4);
+        g.shake(0.9);
+        break;
+      case 'thunder': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const o = g.camera.position;
+        const wh = g.world.raycast(o, f, 120);
+        let pt = wh ? wh.point.clone() : o.clone().addScaledVector(f, 60);
+        const eh = g.hitTestEntities(o, f, wh ? wh.dist : 120, this.id, false);
+        if (eh) pt = o.clone().addScaledVector(f, eh.dist);
+        g.addStrike(pt, 0.45, 7, 45, this, false);
+        break;
+      }
+      case 'blackhole': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const o = g.camera.position;
+        const wh = g.world.raycast(o, f, 80);
+        let pt = wh ? wh.point.clone() : o.clone().addScaledVector(f, 40);
+        const eh = g.hitTestEntities(o, f, wh ? wh.dist : 80, this.id, false);
+        if (eh) pt = o.clone().addScaledVector(f, eh.dist);
+        pt.y += 2;
+        g.addWell(pt, this);
+        break;
+      }
+      case 'missiles':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        if (!g.fireMissiles(this)) { g.ui.toast('🐝 No targets within 70 m'); return false; }
+        break;
       case 'parry':
         this.parryT = 2; this.parried.clear();
         _a.copy(this.pos); _a.y += 0.8;

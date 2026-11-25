@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { World, SPAWN, CHUNK, inSafeZone } from './world.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Grass, Dust } from './realism.js';
+import { World, SPAWN, CHUNK, KILL_Y, inSafeZone } from './world.js';
 import { Player, HOOK } from './player.js';
 import { Enemy } from './enemy.js';
 import { Remote } from './remote.js';
@@ -12,7 +17,7 @@ import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope } from './models.js';
 import { computeStats, COSTS, MAX_LEVEL, ABILITY } from './upgrades.js';
-import { ENEMY_TYPES, ENEMY_KEYS } from './enemytypes.js';
+import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
 
 window.__errs = [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -57,9 +62,16 @@ class Game {
     this.fogColor = 0xbcd4ec;
     const loadR = hi ? 5 : 4;
     this.viewDist = loadR * CHUNK;
-    this.scene.fog = new THREE.Fog(this.fogColor, this.viewDist * 0.28, this.viewDist * 0.95);
+    this.scene.fog = new THREE.FogExp2(this.fogColor, 1.35 / this.viewDist);
+    if (hi) {
+      this.composer = new EffectComposer(r);
+      this.composer.addPass(new RenderPass(this.scene, null));
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.16, 0.4, 1.0));
+      this.composer.addPass(new OutputPass());
+    }
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 5000);
     this.camera.rotation.order = 'YXZ';
+    if (this.composer) this.composer.passes[0].camera = this.camera;
     this.scene.add(this.camera);
     this.setupSky(hi);
 
@@ -67,6 +79,10 @@ class Game {
     this.world.camera = this.camera;
     this.clouds = new Clouds(this.scene, hi, this.fogColor, this.viewDist);
     this.particles = new Particles(this.scene);
+    this.grass = new Grass(this.scene, this.world, hi, CHUNK);
+    this.dust = new Dust(this.scene, hi ? 350 : 160);
+    this.strikes = []; this.wells = []; this.missiles = []; this.loot = [];
+    this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
     this.sfx = new Sfx();
     this.ui = new UI(this, isTouch);
     this.player = new Player(this);
@@ -152,6 +168,7 @@ class Game {
   }
   resize() {
     this.renderer.setSize(innerWidth, innerHeight);
+    if (this.composer) this.composer.setSize(innerWidth, innerHeight);
     this.camera.aspect = this.gunCam.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.gunCam.updateProjectionMatrix();
@@ -262,16 +279,211 @@ class Game {
     if (dp < 35) this.shake(0.6 * (1 - dp / 35) + 0.15);
     this.sfx.near('thunk', at); this.sfx.near('hurt', at);
   }
-  enemyMagnet(e) {
+  enemyMagnet(e, R = 32) {
     const to = e.pos.clone(); to.y += 1.2;
     const pull = (ent) => {
-      if (ent.dead || ent.pos.distanceTo(e.pos) > 32) return;
+      if (ent.dead || ent.pos.distanceTo(e.pos) > R) return;
       this.deliverHit(ent.id, { mode: 'pull', dmg: 8, a: to.toArray(), attacker: e.id, aname: e.name });
     };
     pull(this.player);
     for (const r of this.remotes.values()) if (r.kind === 'player') pull(r);
     this.particles.burst(to, 0xc77dff, 26, 12, 0.22);
     this.sfx.near('zip', e.pos);
+  }
+  // ---------------- boss & rare-ability effects
+  blast(at, owner, R, DMG, hitPlayers, hitEnemies, KM = 1) {
+    const hit = (ent) => {
+      if (ent.dead || ent.id === owner.id) return;
+      const sc = ent.scale || 1;
+      const dx = ent.pos.x - at.x, dy = ent.pos.y + 0.7 * sc - at.y, dz = ent.pos.z - at.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > R + sc * 0.6) return;
+      const f = Math.max(0, 1 - d / (R + sc * 0.6));
+      const l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(ent.id, { mode: 'bump', dmg: Math.round(DMG * (0.5 + 0.5 * f)), d: [dx / l, 0, dz / l], k: (0.8 + 1.4 * f) * KM, attacker: owner.id, aname: owner.name });
+    };
+    if (hitPlayers) { hit(this.player); for (const r of this.remotes.values()) if (r.kind === 'player') hit(r); }
+    if (hitEnemies) { for (const e of this.enemies) hit(e); for (const r of this.remotes.values()) if (r.kind === 'enemy') hit(r); }
+  }
+  ownerOf(ent) { return { id: ent.id, name: ent === this.player ? this.name : ent.name, enemy: ent !== this.player }; }
+  addStrike(pos, delay, R, DMG, ownerEnt, fromEnemy) {
+    const gy = this.world.groundAt(pos.x, pos.y + 3, pos.z);
+    const y = gy !== null && pos.y - gy < 8 ? gy : pos.y;
+    const ring = new THREE.Mesh(this.fxGeo.ring, new THREE.MeshBasicMaterial({ color: fromEnemy ? 0xff3030 : 0x66ccff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.scale.setScalar(R); ring.position.set(pos.x, y + 0.2, pos.z);
+    this.scene.add(ring);
+    this.strikes.push({ pos: new THREE.Vector3(pos.x, y + 1, pos.z), t: delay, R, DMG, owner: this.ownerOf(ownerEnt), fromEnemy, ring, bolt: null, bt: 0 });
+  }
+  enemyLightning(e, tg) {
+    const targets = [this.player, ...[...this.remotes.values()].filter((r) => r.kind === 'player')];
+    for (const pl of targets) {
+      if (pl.dead || inSafeZone(pl.pos) || pl.pos.distanceTo(e.pos) > 90) continue;
+      const q = pl.pos.clone(); q.x += (Math.random() - 0.5) * 3; q.z += (Math.random() - 0.5) * 3;
+      this.addStrike(q, 1.3, 5, 28, e, true);
+    }
+    for (let i = 0; i < 2; i++) {
+      const q = tg.pos.clone(); q.x += (Math.random() - 0.5) * 14; q.z += (Math.random() - 0.5) * 14;
+      this.addStrike(q, 1.0 + Math.random() * 0.8, 5, 28, e, true);
+    }
+    this.sfx.near('zip', e.pos);
+  }
+  hiveSummon(e) {
+    e.minions = (e.minions || []).filter((m) => !m.dead);
+    if (e.minions.length >= 5) return;
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * TAU;
+      const x = e.pos.x + Math.cos(a) * 6, z = e.pos.z + Math.sin(a) * 6;
+      const gy = this.world.groundAt(x, e.pos.y + 4, z);
+      if (gy === null) continue;
+      const m = new Enemy(this, new THREE.Vector3(x, gy + 0.5, z), Math.random() < 0.5 ? 'zipper' : 'bomber');
+      this.enemies.push(m); e.minions.push(m);
+      this.particles.burst(m.pos, 0xffd23a, 14, 6, 0.2);
+    }
+    this.sfx.near('buy', e.pos);
+  }
+  addWell(pos, ownerEnt) {
+    const core = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0x050008 }));
+    core.scale.setScalar(1.3);
+    const halo = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0x9b4dff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    core.position.copy(pos); halo.position.copy(pos);
+    this.scene.add(core, halo);
+    this.wells.push({ pos: pos.clone(), t: 3, pulse: 0, owner: this.ownerOf(ownerEnt), core, halo });
+    this.sfx.zip();
+  }
+  fireMissiles(p) {
+    const list = [];
+    for (const e of this.enemies) if (!e.dead) list.push(e);
+    for (const r of this.remotes.values()) if (!r.dead) list.push(r);
+    const near = list.map((e) => [e, e.pos.distanceTo(p.pos)]).filter((x) => x[1] < 70).sort((a, b) => a[1] - b[1]).slice(0, 4);
+    near.forEach(([e], i) => {
+      const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+      m.scale.setScalar(0.35);
+      const start = p.eye(); start.y += 0.3;
+      m.position.copy(start);
+      this.scene.add(m);
+      const v = new THREE.Vector3((i - 1.5) * 9, 14, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw);
+      this.missiles.push({ pos: start, vel: v, target: e.id, t: 5, owner: this.ownerOf(p), mesh: m, trail: 0 });
+    });
+    if (near.length) this.sfx.shoot();
+    return near.length;
+  }
+  spawnLoot(key, at) {
+    const A = ABILITY[key];
+    if (!A) return;
+    if (this.save.abil[key]) { this.addCoins(150); this.ui.toast(`👑 Boss loot: +150 🪙 (you already have ${A.name})`); return; }
+    const p = this.player;
+    let pos = at ? new THREE.Vector3().fromArray(at) : null;
+    if (pos) { const gy = this.world.groundAt(pos.x, pos.y + 3, pos.z); if (gy === null) pos = null; else pos.y = gy; }
+    if (!pos) { const f = p.forward(); f.y = 0; f.normalize(); pos = p.pos.clone().addScaledVector(f, 4); }
+    pos.y += 1.4;
+    const gem = new THREE.Mesh(this.fxGeo.gem, new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xff9a00, emissiveIntensity: 1.6, metalness: 0.6, roughness: 0.2 }));
+    gem.scale.set(0.8, 1.2, 0.8); gem.position.copy(pos);
+    const beam = new THREE.Mesh(this.fxGeo.beam, new THREE.MeshBasicMaterial({ color: 0xffc83a, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    beam.position.set(pos.x, pos.y + 45, pos.z);
+    this.scene.add(gem, beam);
+    this.loot.push({ key, pos, gem, beam });
+    this.ui.toast(`👑 RARE DROP: ${A.icon} ${A.name}! Grab the golden gem`);
+    this.ui.feed(`👑 ${A.name} dropped (follow the gold beam)`, 'me');
+  }
+  updateFx(dt) {
+    const p = this.player;
+    for (let i = this.strikes.length - 1; i >= 0; i--) {
+      const s = this.strikes[i];
+      s.t -= dt;
+      if (!s.bolt) {
+        s.ring.material.opacity = 0.3 + 0.4 * Math.abs(Math.sin(this.time * 14));
+        if (s.t <= 0) {
+          s.bolt = new THREE.Mesh(this.fxGeo.bolt, new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+          s.bolt.position.set(s.pos.x, s.pos.y + 119, s.pos.z);
+          this.scene.add(s.bolt);
+          s.bt = 0.3;
+          this.blast(s.pos, s.owner, s.R, s.DMG, true, !s.fromEnemy, 1.2);
+          this.particles.burst(s.pos, 0xbfe4ff, 30, 14, 0.25);
+          const dp = s.pos.distanceTo(p.pos);
+          if (dp < 60) this.shake(0.7 * (1 - dp / 60));
+          this.hurtV = Math.max(this.hurtV, dp < 40 ? 0.15 : 0);
+          this.sfx.near('thunk', s.pos); this.sfx.near('hit', s.pos);
+        }
+      } else {
+        s.bt -= dt;
+        s.bolt.material.opacity = Math.max(0, s.bt / 0.3);
+        s.bolt.scale.x = s.bolt.scale.z = 0.6 + Math.random() * 0.8;
+        if (s.bt <= 0) {
+          this.scene.remove(s.ring, s.bolt);
+          s.ring.material.dispose(); s.bolt.material.dispose();
+          this.strikes.splice(i, 1);
+        }
+      }
+    }
+    for (let i = this.wells.length - 1; i >= 0; i--) {
+      const w = this.wells[i];
+      w.t -= dt; w.pulse -= dt;
+      w.halo.scale.setScalar(3.5 + Math.sin(this.time * 9) * 0.6);
+      w.core.rotation.y += dt * 4;
+      if (w.pulse <= 0 && w.t > 0) {
+        w.pulse = 0.5;
+        const to = w.pos.toArray();
+        const pull = (ent) => {
+          if (ent.dead || ent.id === w.owner.id || ent.pos.distanceTo(w.pos) > 25) return;
+          this.deliverHit(ent.id, { mode: 'pull', dmg: 6, a: to, attacker: w.owner.id, aname: w.owner.name });
+        };
+        for (const e of this.enemies) pull(e);
+        for (const r of this.remotes.values()) pull(r);
+        this.particles.burst(w.pos, 0x9b4dff, 14, 9, 0.18);
+      }
+      if (w.t <= 0) {
+        this.blast(w.pos, w.owner, 7, 25, true, true, 1.4);
+        this.particles.burst(w.pos, 0xc77dff, 36, 16, 0.3);
+        this.scene.remove(w.core, w.halo);
+        w.core.material.dispose(); w.halo.material.dispose();
+        this.wells.splice(i, 1);
+        this.sfx.thunk();
+      }
+    }
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      const m = this.missiles[i];
+      m.t -= dt;
+      const tg = this.getEntity(m.target);
+      let boom = m.t <= 0 || !tg || tg.dead;
+      if (!boom) {
+        _v.copy(tg.pos); _v.y += 0.7 * (tg.scale || 1);
+        _w.subVectors(_v, m.pos);
+        const d = _w.length();
+        if (d < 1.4 + (tg.scale || 1) * 0.5) boom = true;
+        else {
+          _w.multiplyScalar(60 / d);
+          m.vel.lerp(_w, Math.min(1, 4 * dt));
+          m.pos.addScaledVector(m.vel, dt);
+          m.mesh.position.copy(m.pos);
+          m.trail -= dt;
+          if (m.trail <= 0) { m.trail = 0.05; this.particles.burst(m.pos, 0xffb020, 1, 1, 0.12); }
+        }
+      }
+      if (boom) {
+        this.blast(m.pos, m.owner, 4.5, 30, true, true);
+        this.particles.burst(m.pos, 0xffb020, 16, 9, 0.25);
+        this.sfx.near('thunk', m.pos);
+        this.scene.remove(m.mesh); m.mesh.material.dispose();
+        this.missiles.splice(i, 1);
+      }
+    }
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const L = this.loot[i];
+      L.gem.rotation.y += dt * 2;
+      L.gem.position.y = L.pos.y + Math.sin(this.time * 2.5) * 0.3;
+      if (!p.dead && p.pos.distanceTo(L.pos) < 3.2) {
+        const A = ABILITY[L.key];
+        this.save.abil[L.key] = true;
+        this.persist();
+        this.ui.renderAbilities();
+        this.ui.toast(`${A.icon} RARE ABILITY UNLOCKED: ${A.name}! (key ${A.hk})`);
+        this.sfx.buy(); this.sfx.kill();
+        this.particles.burst(L.pos, 0xffd23a, 40, 10, 0.25);
+        this.scene.remove(L.gem, L.beam);
+        L.gem.material.dispose(); L.beam.material.dispose();
+        this.loot.splice(i, 1);
+      }
+    }
   }
   bossSlam(e) {
     const c = e.pos;
@@ -317,15 +529,15 @@ class Game {
     if (dp < 40) this.shake(0.8 * (1 - dp / 40) + 0.2);
     this.sfx.thunk(); this.sfx.hurt(); this.sfx.hit();
   }
-  shockwave(p) {
+  shockwave(p, R = 14, DMG = 20, KM = 1) {
     const c = p.pos;
     const hit = (ent) => {
       if (ent.dead || ent === p) return;
       const dx = ent.pos.x - c.x, dy = ent.pos.y - c.y, dz = ent.pos.z - c.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > 14) return;
+      if (d > R) return;
       const l = Math.hypot(dx, dz) || 1;
-      this.deliverHit(ent.id, { mode: 'bump', dmg: 20, d: [dx / l, 0, dz / l], k: 0.9 + 1.8 * (1 - d / 14), attacker: p.id, aname: this.name });
+      this.deliverHit(ent.id, { mode: 'bump', dmg: DMG, d: [dx / l, 0, dz / l], k: (0.9 + 1.8 * (1 - d / R)) * KM, attacker: p.id, aname: this.name });
     };
     for (const e of this.enemies) hit(e);
     for (const r of this.remotes.values()) hit(r);
@@ -410,11 +622,12 @@ class Game {
   }
   onEnemyDeath(e) {
     const la = e.lastAttacker;
-    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward);
-    if (e.T.boss) this.ui.feed('👑 The Sky Titan has fallen!', 'me');
+    const drop = e.T.drop ? { k: e.T.drop, at: e.pos.y > KILL_Y + 25 ? e.pos.toArray() : null } : null;
+    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward, drop);
+    if (e.T.boss) this.ui.feed(`👑 ${e.name} has fallen!`, 'me');
   }
-  reportKill(killer, kname, vname, vkind, reward) {
-    const m = { t: 'kill', killer, kname, vname, vkind, reward };
+  reportKill(killer, kname, vname, vkind, reward, drop) {
+    const m = { t: 'kill', killer, kname, vname, vkind, reward, drop };
     this.handleKill(m);
     if (this.net) this.net.send(m);
   }
@@ -426,6 +639,7 @@ class Game {
       this.addCoins(reward);
       this.sfx.kill();
       this.ui.toast(`+${reward} 🪙  ${m.vname} eliminated!`);
+      if (m.drop) this.spawnLoot(m.drop.k, m.drop.at);
     }
   }
   manageEnemies() {
@@ -443,9 +657,10 @@ class Game {
       if (!has && big.length) {
         const I = big[Math.floor(Math.random() * big.length)];
         const bp = I.pointAt(Math.random() * TAU, 0.3); bp.y += 2;
-        this.enemies.push(new Enemy(this, bp, 'titan'));
-        this.ui.toast('⚠️ A SKY TITAN has appeared!');
-        this.ui.feed('👑 Sky Titan spotted nearby: 300 coins bounty', 'pk');
+        const bk = BOSS_KEYS[Math.floor(Math.random() * BOSS_KEYS.length)], BT = ENEMY_TYPES[bk];
+        this.enemies.push(new Enemy(this, bp, bk));
+        this.ui.toast(`⚠️ ${BT.name} has appeared!`);
+        this.ui.feed(`👑 ${BT.name} spotted: ${BT.reward} 🪙 + rare ability`, 'pk');
       }
     }
     let near = this.enemies.length;
@@ -559,6 +774,7 @@ class Game {
         if (now - r.lastSeen > 6000) { this.removeRemote(id); continue; }
         r.update(dt);
       }
+      this.updateFx(dt);
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) { this.spawnTimer = 0.8; this.manageEnemies(); }
       if (this.net && this.net.ready) {
@@ -588,6 +804,8 @@ class Game {
     this.world.update(this.running ? p.pos : cam.position, dt);
     this.clouds.update(cam, this.time);
     this.particles.update(dt);
+    this.grass.update(this.running ? p.pos : cam.position, dt);
+    this.dust.update(cam, this.time);
     this.sky.position.copy(cam.position);
     const focus = this.running ? p.pos : cam.position;
     this.sun.position.copy(focus).addScaledVector(this.sunDir, 300);
@@ -596,8 +814,8 @@ class Game {
     this.ui.whiteout(Math.min(1, Math.max(0, (-160 - cam.position.y) / 30)));
 
     const r = this.renderer;
-    r.clear();
-    r.render(this.scene, cam);
+    if (this.composer) this.composer.render();
+    else { r.clear(); r.render(this.scene, cam); }
     if (this.running && !p.dead) { r.clearDepth(); r.render(this.gunScene, this.gunCam); }
   }
 
@@ -922,6 +1140,71 @@ if (location.search.includes("autotest")) {
       boss.dead = true; boss.dispose(); game.enemies = [];
       p.applyHit = oa; p.hp = 100;
       log.round3 = z;
+    }
+    // round 4: bosses, loot, rare abilities, grass
+    {
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      game.spawnTimer = 999;
+      const c6 = game.world.spawnCandidates(p.pos, 100, 900).sort((a, b) => b.R - a.R)[0];
+      const st6 = c6.pointAt(0.5, 0.1); st6.y += 0.5;
+      const reset = () => { p.dead = false; p.hp = 9999; p.pos.copy(st6); p.vel.set(0, 0, 0); p.cd = {}; sim(0.3); };
+      const r4 = { bosses: {} };
+      const hitsOnMe = {};
+      const oa = p.applyHit.bind(p);
+      p.applyHit = (h) => { hitsOnMe[h.aname + ':' + h.mode] = (hitsOnMe[h.aname + ':' + h.mode] || 0) + 1; return oa(h); };
+      for (const bk of ['thunder', 'voidmaw', 'hive']) {
+        reset();
+        const q = c6.pointAt(0.5 + Math.PI, 0.4); q.y += 2;
+        const b = new Enemy(game, q, bk); b.specialCool = 0.5; game.enemies.push(b);
+        for (let i = 0; i < 14; i++) { sim(1); if (p.dead) p.respawn(); p.hp = 9999; if (i % 3 === 0) { p.pos.copy(st6); p.vel.set(0, 0, 0); } }
+        r4.bosses[bk] = { minions: game.enemies.length - 1, strikesSeen: game.strikes.length };
+        // kill it as the player -> loot drop
+        b.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; b.hp = 1;
+        const coins0 = game.save.coins;
+        b.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' });
+        r4.bosses[bk].reward = game.save.coins - coins0;
+        r4.bosses[bk].lootSpawned = game.loot.length;
+        game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+        // walk into loot
+        if (game.loot.length) { p.pos.copy(game.loot[0].pos); p.pos.y -= 1.2; sim(0.2); }
+        r4.bosses[bk].unlocked = !!game.save.abil[b.T.drop];
+      }
+      r4.hitsOnMe = hitsOnMe;
+      r4.rareButtons = document.querySelectorAll('#rareAbilities .ab').length;
+      // rare abilities in action
+      game.save.abil.titanslam = true;
+      const clearOff = (dist) => {
+        for (let a = 0; a < 6.28; a += 0.4) {
+          const off = new THREE.Vector3(Math.sin(a) * dist, 0, Math.cos(a) * dist);
+          const tp = p.pos.clone().add(off);
+          const gy = game.world.groundAt(tp.x, p.pos.y + 4, tp.z);
+          if (gy === null || Math.abs(gy - p.pos.y) > 3) continue;
+          const e0 = p.eye(); const tc = new THREE.Vector3(tp.x, gy + 1.2, tp.z); const dd = tc.clone().sub(e0); const L = dd.length();
+          if (!game.world.raycast(e0, dd.normalize(), L)) return new THREE.Vector3(off.x, gy - p.pos.y + 0.3, off.z);
+        }
+        return new THREE.Vector3(0, 0.3, -dist);
+      };
+      const mk = (off) => { const e = new Enemy(game, p.pos.clone().add(off), 'brute'); e.think = 999; game.enemies.push(e); return e; };
+      reset(); let e1 = mk(new THREE.Vector3(6, 0.3, 0)); sim(0.3); p.useAbility('titanslam'); sim(0.1);
+      r4.titanslam = { dmg: 160 - e1.hp, speed: Math.round(e1.vel.length()) };
+      reset(); e1.dead = true; e1.dispose(); game.enemies = [];
+      e1 = mk(clearOff(25)); sim(0.3); const tgt = e1.pos.clone(); tgt.y += 1.2; aim(tgt); const blasts = []; const ob = game.blast.bind(game); game.blast = (at, ow, R, D, hp, he, k) => { blasts.push([at.toArray().map(Math.round), ow.id, R, D, hp, he, game.enemies.map((e) => [e.id, e.pos.toArray().map(Math.round), e.dead, e.hp])]); const dh = game.deliverHit; return ob(at, ow, R, D, hp, he, k); }; r4.blasts = blasts; const tu = p.useAbility('thunder'); const sk = game.strikes.map((x) => [x.pos.toArray().map(Math.round), x.t, x.R]); r4.thunderDbg = { tu, sk, e1: e1.pos.toArray().map(Math.round), cd: p.cd.thunder, safe: p.safe, dead: p.dead }; sim(0.2); r4.thunderDbg.after = game.strikes.map((x) => [x.t.toFixed(2), !!x.bolt]); sim(0.6);
+      r4.thunder = { dmg: 160 - e1.hp };
+      e1.dead = true; e1.dispose(); game.enemies = [];
+      reset(); const o30 = clearOff(30); e1 = mk(o30); const e2 = mk(o30.clone().add(new THREE.Vector3(o30.z * 0.35, 0, -o30.x * 0.35))); sim(0.3);
+      const before = e2.pos.distanceTo(e1.pos);
+      const ap = e1.pos.clone(); ap.y += 1.2; aim(ap); p.useAbility('blackhole'); sim(1.5);
+      r4.blackhole = { pulledCloser: Math.round(before) + '->' + Math.round(e2.pos.distanceTo(e1.pos)), wells: game.wells.length };
+      sim(2.5); r4.blackhole.burstDmg = (160 - e1.hp) + '/' + (160 - e2.hp);
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      reset(); const ms = [mk(new THREE.Vector3(20, 0.3, 0)), mk(new THREE.Vector3(-20, 0.3, 0)), mk(new THREE.Vector3(0, 0.3, 25))];
+      sim(0.3); r4.missilesFired = game.fireMissiles(p); sim(3);
+      r4.missileDmg = ms.map((e) => 160 - e.hp);
+      game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+      r4.grassChunks = game.grass.built.size;
+      r4.grassBlades = [...game.grass.built.values()].reduce((a, m) => a + m.count, 0);
+      p.applyHit = oa; p.hp = 100;
+      log.round4 = r4;
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);

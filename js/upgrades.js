@@ -40,4 +40,11 @@ export const ABILITIES = [
   { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
   { key: 'parry', icon: '⚔️', name: 'PARRY', cost: 200, cd: 10, hk: 'R', desc: 'For 2 seconds nothing can hurt you. Anyone who hits you gets launched at you at super speed and takes 50 damage. (You deal no damage while parrying.)' },
 ];
+// Rare abilities: only dropped by bosses
+ABILITIES.push(
+  { key: 'titanslam', icon: '🌋', name: 'Titan Slam', rare: 'SKY TITAN', cost: 0, cd: 12, hk: 'C', desc: 'Slam the ground: 35 dmg and huge knockback to everyone within 18 m.' },
+  { key: 'thunder', icon: '⚡', name: 'Thunder Strike', rare: 'THUNDER KING', cost: 0, cd: 10, hk: 'V', desc: 'Call lightning where you aim (up to 120 m): up to 45 dmg in 7 m.' },
+  { key: 'blackhole', icon: '🌀', name: 'Black Hole', rare: 'VOID MAW', cost: 0, cd: 18, hk: 'B', desc: 'Open a black hole where you aim. It sucks in enemies and players for 3 s, then bursts.' },
+  { key: 'missiles', icon: '🐝', name: 'Hive Missiles', rare: 'HIVE QUEEN', cost: 0, cd: 14, hk: 'N', desc: 'Launch 4 homing stingers at the nearest targets (30 dmg each).' },
+);
 export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));

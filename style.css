@@ -156,3 +156,9 @@ body.touch .ab .ai { font-size: 20px; line-height: 42px; }
 .ab.parry { border-color: #ffd23a; background: rgba(90,60,0,0.6); }
 body.touch .ab.parry { position: fixed; right: max(224px, calc(env(safe-area-inset-right) + 200px)); bottom: 24px; width: 62px; height: 62px; }
 body.touch .ab.parry .ai { font-size: 26px; line-height: 58px; }
+
+#rareAbilities { position: absolute; left: 50%; bottom: 98px; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: auto; }
+.ab.rare { border-color: #ffb020; background: linear-gradient(180deg, rgba(120,70,0,0.7), rgba(40,20,0,0.7)); box-shadow: 0 0 10px rgba(255,170,30,0.5); }
+body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162px; bottom: auto; transform: none; gap: 5px; }
+.upg.rare { background: rgba(255,170,30,0.13); }
+.upg.rare button { font-size: 11px; min-width: 120px; }

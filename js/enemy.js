@@ -61,7 +61,8 @@ export class Enemy {
 
   update(dt) {
     if (this.dead) return;
-    this.cool -= dt; this.slamCool -= dt; this.specialCool -= dt; this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
+    this.cool -= dt; this.slamCool -= dt; this.specialCool -= dt;
+    if (this.pulseN > 0) { this.pulseT -= dt; if (this.pulseT <= 0) { this.pulseT = 1; this.pulseN--; this.game.enemyMagnet(this, 45); } } this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
     if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
     this.move(dt);
     integrate(this, dt, this.game.world);
@@ -175,7 +176,10 @@ export class Enemy {
       this.yaw = Math.atan2(-_a.x, -_a.z);
       this.pitch = Math.atan2(_a.y, Math.hypot(_a.x, _a.z));
       const T = this.T;
-      if (T.boss && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
+      if (T.bossKind === 'titan' && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
+      if (T.bossKind === 'thunder' && this.specialCool <= 0 && d < 90) { this.specialCool = 4.5; g.enemyLightning(this, tg); return; }
+      if (T.bossKind === 'void' && this.specialCool <= 0 && d < 45) { this.specialCool = 7; this.pulseN = 3; this.pulseT = 0; }
+      if (T.bossKind === 'hive' && this.specialCool <= 0) { this.specialCool = 10; g.hiveSummon(this); }
       if (T.special === 'magnet' && this.specialCool <= 0 && d < 32) { this.specialCool = T.specialCd; g.enemyMagnet(this); return; }
       if (T.special === 'blink' && this.specialCool <= 0 && d < 70 && d > 6 && tg.ground) {
         // teleport right behind the target, then shove them
