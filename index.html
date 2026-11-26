@@ -28,7 +28,7 @@
   <div id="whiteout"></div>
   <div id="hurt"></div>
   <div id="shieldFx"></div>
-  <div id="parryFx"></div><div id="frostFx" class="sfx"></div><div id="cloakFx" class="sfx"></div><div id="warpFx" class="sfx"></div><div id="rageFx" class="sfx"></div><div id="scopeFx" class="sfx"><div class="scopeX"></div></div>
+  <div id="parryFx"></div><div id="frostFx" class="sfx"></div><div id="cloakFx" class="sfx"></div><div id="warpFx" class="sfx"></div><div id="rageFx" class="sfx"></div><div id="runFx" class="sfx"></div><div id="scopeFx" class="sfx"><div class="scopeX"></div></div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
@@ -38,7 +38,7 @@
       <div id="speedo"></div>
     </div>
     <div id="topCenter">
-      <div class="arrows"><div id="shopArrowWrap" class="hidden"><div id="shopArrow">▲</div><span id="shopDist"></span></div><div id="bossArrowWrap" class="hidden"><div id="bossArrow">▲</div><span id="bossDist"></span></div></div>
+      <div class="arrows"><div id="shopArrowWrap" class="hidden"><div id="shopArrow">▲</div><span id="shopDist"></span></div><div id="passArrowWrap" class="hidden"><div id="passArrow">▲</div><span id="passDist"></span></div><div id="bossArrowWrap" class="hidden"><div id="bossArrow">▲</div><span id="bossDist"></span></div></div>
       <div id="safeTag" class="hidden">🛡️ SAFE ZONE</div>
       <div id="bossBar" class="hidden"><div id="bossName"></div><div class="bb"><div id="bossFill"></div></div></div>
     </div>
@@ -80,6 +80,7 @@
       <div class="row"><input id="roomInput" placeholder="ROOM CODE" maxlength="6" autocomplete="off" /><button id="joinRoom">Join</button></div>
       <label class="field small">Look sensitivity <span class="sensbox"><input type="range" id="sens" min="0.2" max="3" step="0.1" /><b id="sensVal">1.0×</b></span></label>
       <label class="field small check">Invert up/down <input type="checkbox" id="invertY" /></label>
+      <label class="field small">Music volume <span class="sensbox"><input type="range" id="musicVol" min="0" max="100" step="5" /><b id="musicVal">50%</b></span></label>
       <label class="field small">Graphics
         <select id="quality"><option value="high">High (PC)</option><option value="low">Low (phone)</option></select>
       </label>
@@ -106,7 +107,7 @@
   <!-- Shop -->
   <div id="shop" class="hidden">
     <div class="panel wide">
-      <h2>🛒 Grapple Shop</h2>
+      <h2 id="shopTitle">🛒 Grapple Shop</h2>
       <div id="shopCoins"></div>
       <div id="shopList"></div>
       <button id="shopClose" class="primary">Close (E)</button>
@@ -128,6 +129,7 @@
       <p class="desktop-only">The game keeps running in multiplayer.</p>
       <label class="field small">Look sensitivity <span class="sensbox"><input type="range" id="sens2" min="0.2" max="3" step="0.1" /><b id="sensVal2">1.0×</b></span></label>
       <label class="field small check">Invert up/down <input type="checkbox" id="invertY2" /></label>
+      <label class="field small">Music volume <span class="sensbox"><input type="range" id="musicVol2" min="0" max="100" step="5" /><b id="musicVal2">50%</b></span></label>
       <button id="resume" class="primary">Resume</button>
       <button id="toMenu">Leave to menu</button>
     </div>

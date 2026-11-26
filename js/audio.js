@@ -1,6 +1,7 @@
 // Tiny synthesized sound effects (no audio files needed)
+import { Music } from './music.js';
 export class Sfx {
-  constructor() { this.ctx = null; this.muted = false; this.vm = 1; this.listener = null; }
+  constructor() { this.ctx = null; this.muted = false; this.vm = 1; this.listener = null; this.music = new Music(); }
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     try { const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C(); } catch (e) { return; }
@@ -19,7 +20,10 @@ export class Sfx {
     this.windGain = c.createGain(); this.windGain.gain.value = 0;
     src.connect(this.windFilter).connect(this.windGain).connect(this.master);
     src.start();
+    this.music.setup(c, this.master, this.noise);
+    if (this.wantMusic) this.music.start();
   }
+  playMusic() { this.wantMusic = true; if (this.ctx) this.music.start(); }
   toggleMute() { this.muted = !this.muted; if (this.master) this.master.gain.value = this.muted ? 0 : 0.55; return this.muted; }
   tone(f0, f1, dur, type = 'sine', vol = 0.2, delay = 0) {
     const c = this.ctx; if (!c || this.muted) return;

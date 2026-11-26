@@ -66,3 +66,18 @@ export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));
 // keyboard key for every ability (first ten use 1-9, 0)
 export const abilityKey = (A) => A.hk || String((ABILITIES.indexOf(A) + 1) % 10);
 export const abilityCode = (A) => A.code || (/\d/.test(abilityKey(A)) ? 'Digit' + abilityKey(A) : 'Key' + abilityKey(A));
+
+// Passives: bought once in the rare purple PASSIVE SHOPS, always active.
+export const PASSIVES = [
+  { key: 'runner', icon: '🏃', name: 'RUNNER', cost: 2000, desc: 'Land on the ground while moving fast and you sprint at super speed for 2 seconds.' },
+  { key: 'doublejump', icon: '🦅', name: 'Double Jump', cost: 1500, desc: 'Jump once more in mid-air.' },
+  { key: 'lifesteal', icon: '🧛', name: 'Lifesteal', cost: 2500, desc: 'Heal 15% of all the damage you deal.' },
+  { key: 'goldrush', icon: '💰', name: 'Gold Rush', cost: 1500, desc: '+50% coins from everything.' },
+  { key: 'ironskin', icon: '🦾', name: 'Iron Skin', cost: 2500, desc: 'Take 25% less damage.' },
+  { key: 'quickcharge', icon: '⚡', name: 'Quick Charge', cost: 3000, desc: 'All ability cooldowns are 25% shorter.' },
+  { key: 'angel', icon: '😇', name: 'Guardian Angel', cost: 3500, desc: 'When you fall off an island, you are carried back to the last ground you stood on. Once every 60 s.' },
+  { key: 'thorns', icon: '🌵', name: 'Thorns', cost: 2000, desc: 'Anyone who hurts you takes 10 damage back.' },
+  { key: 'explosive', icon: '💥', name: 'Explosive Hook', cost: 3000, desc: 'Your hook explodes when it hits someone (18 dmg in 4.5 m).' },
+  { key: 'regen', icon: '❤️‍🩹', name: 'Regenerator', cost: 1500, desc: 'Health comes back 3× faster and starts after 2 s instead of 4 s.' },
+];
+export const PASSIVE = Object.fromEntries(PASSIVES.map((p) => [p.key, p]));

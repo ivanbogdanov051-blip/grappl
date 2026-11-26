@@ -192,15 +192,17 @@ function buildArch(I, r, x, z) {
   I.coins.push({ x, y: base + h + 3, z });
 }
 function buildShop(I, r, x, z) {
+  // about 1 in 3 shops is a purple PASSIVE SHOP (decided from its position so the world layout stays the same)
+  const passive = (Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1) < 0.34;
   const base = groundMin(I, x, z, 4.5, 3.5) - 0.2;
   addBox(I, x, base, z, 9, 0.4, 7, 0x8d6b48);
   const fy = base + 0.4;
   addBox(I, x, fy, z + 1.2, 5, 1.1, 1.2, WOOD);
   for (const [px, pz] of [[-2.6, -1.6], [2.6, -1.6], [-2.6, 1.9], [2.6, 1.9]]) addBox(I, x + px, fy, z + pz, 0.3, 3.2, 0.3, WOOD);
-  addBox(I, x, fy + 3.2, z + 0.15, 6, 0.25, 4.2, 0xd23c3c);
+  addBox(I, x, fy + 3.2, z + 0.15, 6, 0.25, 4.2, passive ? 0x7a3cd2 : 0xd23c3c);
   for (let i = -2; i <= 2; i += 2) addBox(I, x + i * 1.0, fy + 3.45, z + 0.15, 0.8, 0.05, 4.2, 0xf4f0e6, false);
   addBox(I, x, fy, z - 2.4, 5, 2.4, 0.4, WOOD);
-  I.shop = { x, y: fy, z, I };
+  I.shop = { x, y: fy, z, I, passive };
 }
 
 function populate(I, r) {
@@ -814,11 +816,13 @@ export class World {
     return n;
   }
 
-  nearestShop(pos) {
+  nearestShop(pos, kind) {
     let best = null, bd = Infinity;
     for (const b of this.built.values()) {
       for (const I of this.getData(b.cx, b.cz).islands) {
         if (!I.shop) continue;
+        if (kind === 'passive' && !I.shop.passive) continue;
+        if (kind === 'normal' && I.shop.passive) continue;
         const d = Math.hypot(I.shop.x - pos.x, I.shop.y - pos.y, I.shop.z - pos.z);
         if (d < bd) { bd = d; best = I.shop; }
       }
@@ -1049,11 +1053,11 @@ export class World {
     for (const I of islands) {
       if (!I.shop) continue;
       const S = I.shop;
-      const keeper = makeCharacter(0xf2c230, {});
+      const keeper = makeCharacter(S.passive ? 0xb07aff : 0xf2c230, {});
       keeper.group.position.set(S.x, S.y, S.z - 0.5);
       keeper.group.rotation.y = Math.PI;
       group.add(keeper.group); keepers.push(keeper);
-      const sign = makeTextSprite('SHOP', { bg: 'rgba(255,200,40,0.95)', color: '#3a2600', size: 1.6 });
+      const sign = S.passive ? makeTextSprite('PASSIVES', { bg: 'rgba(150,80,255,0.95)', color: '#fff', size: 1.6 }) : makeTextSprite('SHOP', { bg: 'rgba(255,200,40,0.95)', color: '#3a2600', size: 1.6 });
       sign.position.set(S.x, S.y + 4.6, S.z + 0.2);
       group.add(sign);
       disp.push(sign.material.map, sign.material);

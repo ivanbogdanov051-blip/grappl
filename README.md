@@ -102,6 +102,27 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 
 **Button bar:** it holds 10 abilities on phones and 12 on PC (PARRY always has its own button). In the shop, owned abilities have an **✓ ON BAR / + ADD TO BAR** button to choose which ones get a button. On PC every owned ability works on its key either way.
 
+## Passives (Passive Shops)
+
+About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, purple keeper). A purple arrow at the top of the screen points to the nearest one. Passives are bought once, cost a lot and are always active: no button needed.
+
+| Passive | Cost | Effect |
+|---|---|---|
+| 🏃 **RUNNER** | 2000 | Land on the ground while moving fast and you sprint at super speed (34+ m/s) for 2 seconds |
+| 🦅 Double Jump | 1500 | Jump once more in mid-air |
+| 🧛 Lifesteal | 2500 | Heal 15% of all damage you deal |
+| 💰 Gold Rush | 1500 | +50% coins from everything |
+| 🦾 Iron Skin | 2500 | Take 25% less damage |
+| ⚡ Quick Charge | 3000 | All ability cooldowns 25% shorter |
+| 😇 Guardian Angel | 3500 | Falling off an island carries you back to the last ground you stood on (once every 60 s) |
+| 🌵 Thorns | 2000 | Anyone who hurts you takes 10 damage back |
+| 💥 Explosive Hook | 3000 | Your hook explodes when it hits someone (18 damage in 4.5 m) |
+| ❤️‍🩹 Regenerator | 1500 | Health regenerates 3× faster and starts after 2 s instead of 4 s |
+
+## Music
+
+A fast (150 BPM), epic soundtrack is generated live in the browser: drums, bass, arpeggios, pads and lead melodies in D minor, about 2.5 minutes per pass through intro, verses, choruses, a breakdown and a build. Each time it loops it writes new melodies, so it doesn't repeat exactly. Set the **Music volume** in the menu or pause menu; **M** mutes all sound.
+
 ## Rare abilities (boss drops)
 
 Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock that boss's rare ability; if you already have it you get 150 coins instead.

@@ -24,7 +24,9 @@ export class Player {
     this.safe = true;
     this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
     this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
+    this.runT = 0; this.dj = false; this.angelCd = 0; this.lastGround = null; this.lgT = 0;
   }
+  has(k) { return !!(this.game.save.passive || {})[k]; }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
   forward(out = new V()) {
@@ -46,6 +48,7 @@ export class Player {
     this.climbT = 0;
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
     this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
+    this.runT = 0; this.dj = false; this.lastGround = null;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -347,7 +350,7 @@ export class Player {
         break;
       }
     }
-    this.cd[key] = A.cd;
+    this.cd[key] = A.cd * (this.has('quickcharge') ? 0.75 : 1);
     return true;
   }
 
@@ -367,7 +370,11 @@ export class Player {
     }
     if (this.shieldT > 0) { g.ui.toast('🛡️ Blocked!'); _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fd3ff, 10, 5, 0.15); return; }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
-    this.hp -= hit.dmg || 0;
+    const dmg = (hit.dmg || 0) * (this.has('ironskin') ? 0.75 : 1);
+    this.hp -= dmg;
+    if (dmg > 0 && this.has('thorns') && !hit.thorns && hit.attacker && hit.attacker !== this.id) {
+      g.deliverHit(hit.attacker, { mode: 'burn', dmg: 10, thorns: true, attacker: this.id, aname: g.name });
+    }
     this.lastHurt = g.time;
     g.hurtFlash(); g.shake(0.5); g.sfx.hurt();
     if (hit.freeze) { this.slowT = Math.max(this.slowT, hit.freeze); g.ui.toast(`❄️ Frozen by ${hit.aname}! You're slowed`); }
@@ -407,8 +414,9 @@ export class Player {
     const wl = Math.hypot(wx, wz);
     if (wl > 1) { wx /= wl; wz /= wl; }
     const running = input.run || input.stickMag > 0.92;
-    const maxSp = (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1);
     const hs = Math.hypot(this.vel.x, this.vel.z);
+    if (this.runT > 0 && wl < 0.1 && hs > 1) { wx = this.vel.x / hs; wz = this.vel.z / hs; } // RUNNER keeps you going
+    const maxSp = this.runT > 0 ? Math.max(34, s.speed * 2.2) : (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1);
     if (this.onGround) {
       if (hs > maxSp + 1) {
         const k = Math.max(0, 1 - 3.5 * dt);
@@ -429,6 +437,10 @@ export class Player {
       const drag = Math.max(0, 1 - 0.04 * dt);
       this.vel.x *= drag; this.vel.z *= drag;
       if (this.inWater && input.consumeJump()) this.vel.y = 8;
+      else if (!this.inWater && !this.dj && this.has('doublejump') && input.consumeJump()) {
+        this.dj = true; this.vel.y = Math.max(this.vel.y, 0) + 10.5; this.braking = false;
+        g.particles.burst(this.pos, 0xffffff, 14, 5, 0.2); g.sfx.jump();
+      }
     }
     this.climbT -= dt;
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
@@ -448,13 +460,37 @@ export class Player {
     if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
     this.histT -= dt;
     if (this.histT <= 0) { this.histT = 0.1; this.hist.push(this.pos.clone()); if (this.hist.length > 30) this.hist.shift(); }
+    const wasAir = !this.onGround, preSpeed = Math.hypot(this.vel.x, this.vel.z);
     integrate(this, dt, g.world);
     wallClimb(this, s.climbReach, s.climbSpeed);
+    if (this.onGround) this.dj = false;
+    if (this.runT > 0) {
+      this.runT -= dt;
+      if (Math.random() < dt * 30) { _b.copy(this.pos); _b.y += 0.2; g.particles.burst(_b, 0xffe08a, 2, 3, 0.2); }
+    }
+    if (wasAir && this.onGround && preSpeed > 15 && this.has('runner')) {
+      if (this.runT <= 0) { g.ui.toast('🏃 RUNNER!'); g.sfx.zip(); }
+      this.runT = 2;
+      const k = Math.max(preSpeed, 34) / (preSpeed || 1);
+      this.vel.x *= k; this.vel.z *= k;
+    }
+    if (this.angelCd > 0) this.angelCd -= dt;
+    this.lgT -= dt;
+    if (this.onGround && !this.inWater && this.ground && this.lgT <= 0) { this.lgT = 0.3; (this.lastGround = this.lastGround || new V()).copy(this.pos); }
+    if (this.has('angel') && this.angelCd <= 0 && this.lastGround && this.vel.y < -20 && this.pos.y < this.lastGround.y - 60) {
+      this.angelCd = 60;
+      _a.copy(this.pos); g.particles.burst(_a, 0xfff2b0, 20, 8, 0.3);
+      this.pos.copy(this.lastGround); this.pos.y += 1.5;
+      this.vel.set(0, 4, 0); this.braking = false; this.hook.state = HOOK.IDLE;
+      _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xfff2b0, 36, 9, 0.35);
+      g.sfx.buy(); g.ui.toast('😇 Guardian Angel saved you!');
+    }
     this.updateHook(dt);
     this.safe = inSafeZone(this.pos);
     if (this.hp < s.health) {
-      const calm = g.time - (this.lastHurt || -99) > 4;
-      const rate = this.safe ? 15 : calm ? 6 : 0;
+      const rg = this.has('regen');
+      const calm = g.time - (this.lastHurt || -99) > (rg ? 2 : 4);
+      const rate = this.safe ? 15 : calm ? (rg ? 18 : 6) : 0;
       this.hp = Math.min(s.health, this.hp + rate * dt);
     }
     const c = g.world.collectCoins(this.pos);
@@ -495,6 +531,10 @@ export class Player {
           g.blast(h.pos, g.ownerOf(this), 7, 45, true, true, 1.6);
           g.particles.burst(h.pos, 0xffb020, 34, 15, 0.4); g.particles.burst(h.pos, 0xff4a1a, 22, 11, 0.35); g.particles.burst(h.pos, 0x3a3a3a, 14, 7, 0.5);
           g.ui.toast('🎯💥 SNIPED!'); g.shake(0.5); g.sfx.near('thunk', h.pos); g.sfx.near('hurt', h.pos);
+        }
+        else if (this.has('explosive')) {
+          g.blast(h.pos, g.ownerOf(this), 4.5, 18, true, true, 1);
+          g.particles.burst(h.pos, 0xffb020, 20, 10, 0.3); g.sfx.near('thunk', h.pos);
         }
         h.snipe = false;
         g.sfx.hit(); g.ui.hitMarker();

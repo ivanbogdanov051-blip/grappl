@@ -16,7 +16,7 @@ import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope } from './models.js';
-import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES } from './upgrades.js';
+import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE } from './upgrades.js';
 import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
 
 window.__errs = [];
@@ -101,6 +101,9 @@ class Game {
     this.player.respawn();
     this.save.abil = this.save.abil || {};
     this.save.hidden = this.save.hidden || {};
+    this.save.passive = this.save.passive || {};
+    if (this.save.musicVol === undefined) this.save.musicVol = 0.5;
+    this.sfx.music.setVolume(this.save.musicVol);
     this.ui.renderAbilities();
     addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
@@ -182,6 +185,7 @@ class Game {
     this.save.name = this.name;
     this.persist();
     this.sfx.init();
+    this.sfx.playMusic();
     if (mode !== 'solo' && typeof window.Peer === 'undefined') {
       this.ui.menuStatus('Multiplayer library failed to load (offline?). Try Solo.');
       return;
@@ -233,6 +237,7 @@ class Game {
     if (this.shopOpen) { this.closeShop(); return; }
     if (!this.nearShop || this.player.dead) return;
     this.shopOpen = true;
+    this.shopMode = this.nearShop.passive ? 'passive' : 'normal';
     if (document.pointerLockElement) document.exitPointerLock();
     this.ui.openShop();
   }
@@ -254,6 +259,16 @@ class Game {
     this.persist();
     this.sfx.buy();
     this.ui.renderShop();
+  }
+  buyPassive(key) {
+    const P = PASSIVE[key];
+    if (!P || this.save.passive[key] || this.save.coins < P.cost) return;
+    this.save.coins -= P.cost;
+    this.save.passive[key] = true;
+    this.persist();
+    this.sfx.buy(); this.sfx.kill();
+    this.ui.renderShop();
+    this.ui.toast(`${P.icon} ${P.name} is now always active!`);
   }
   buyAbility(key) {
     const A = ABILITY[key];
@@ -758,6 +773,7 @@ class Game {
     this.sfx.hurt(); this.sfx.thunk();
   }
   addCoins(n, pickup) {
+    if (this.player && this.player.has('goldrush')) n = Math.round(n * 1.5);
     this.save.coins += n;
     this.persist();
     if (pickup) this.sfx.coin();
@@ -819,7 +835,10 @@ class Game {
     if (hit.attacker === me.id && id !== me.id && hit.dmg) {
       if (me.rageT > 0) hit = { ...hit, dmg: Math.round(hit.dmg * 2) };
       if (me.parryT > 0 && !hit.parry) hit = { ...hit, dmg: 0 };
-      else if (me.vampT > 0 && !me.dead) me.hp = Math.min(this.stats.health, me.hp + hit.dmg * 0.5);
+      else {
+        if (me.vampT > 0 && !me.dead) me.hp = Math.min(this.stats.health, me.hp + hit.dmg * 0.5);
+        if (me.has('lifesteal') && !me.dead) me.hp = Math.min(this.stats.health, me.hp + hit.dmg * 0.15);
+      }
     }
     if (id === this.player.id) { this.player.applyHit(hit); return; }
     for (const e of this.enemies) if (e.id === id) { e.applyHit(hit); return; }
@@ -1084,12 +1103,14 @@ class Game {
       this.shopT = 0.25;
       const ns = this.world.nearestShop(p.pos);
       this.nearShop = ns && ns.dist < 7 ? ns.shop : null;
-      ui.shopPrompt(!!this.nearShop && !this.shopOpen && !p.dead);
-      if (ns && ns.dist > 7) {
-        const dx = ns.shop.x - p.pos.x, dz = ns.shop.z - p.pos.z;
-        const ff = Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw));
-        ui.shopArrow(ff - Math.atan2(dx, dz), ns.dist);
-      } else ui.shopArrow(null);
+      ui.shopPrompt(!!this.nearShop && !this.shopOpen && !p.dead, this.nearShop && this.nearShop.passive);
+      const ff = Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw));
+      const nn = this.world.nearestShop(p.pos, 'normal');
+      if (nn && nn.dist > 7) ui.shopArrow(ff - Math.atan2(nn.shop.x - p.pos.x, nn.shop.z - p.pos.z), nn.dist);
+      else ui.shopArrow(null);
+      const np = this.world.nearestShop(p.pos, 'passive');
+      if (np && np.dist > 7) ui.passArrow(ff - Math.atan2(np.shop.x - p.pos.x, np.shop.z - p.pos.z), np.dist);
+      else ui.passArrow(null);
     }
     this.hudT -= dt;
     if (this.hudT <= 0) {
@@ -1114,7 +1135,7 @@ class Game {
         ui.bossArrow(ff - Math.atan2(dx, dz), ad);
       } else ui.bossArrow(null);
       ui.parry(p.parryT > 0);
-      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0); ui.fx('scopeFx', p.snipeT > 0);
+      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0); ui.fx('scopeFx', p.snipeT > 0); ui.fx('runFx', p.runT > 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -1548,8 +1569,62 @@ if (location.search.includes("autotest")) {
         su.superButtons = document.querySelectorAll('#abilities .ab.super').length;
         log.superAbilities = su;
       }
+      {
+        // passives
+        const pa = {};
+        const clr = () => { game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = []; };
+        game.save.passive = {};
+        reset();
+        // runner: land at speed -> super speed for 2 s
+        game.save.passive.runner = true;
+        p.pos.y += 4; p.vel.set(20, 0, 0); p.onGround = false; sim(0.6);
+        pa.runner = { runT: +p.runT.toFixed(1), speed: Math.round(Math.hypot(p.vel.x, p.vel.z)) }; sim(2.2); pa.runner.after = Math.round(Math.hypot(p.vel.x, p.vel.z));
+        // double jump
+        reset(); game.save.passive.doublejump = true; game.input.jumpT = 0.15; sim(0.05); const vy1 = p.vel.y; sim(0.3); game.input.jumpT = 0.15; sim(0.02); pa.doubleJump = { first: Math.round(vy1), second: Math.round(p.vel.y), used: p.dj };
+        // iron skin + thorns
+        reset(); game.save.passive.ironskin = true; game.save.passive.thorns = true;
+        const at = new Enemy(game, p.pos.clone().add(clearOff(10)), 'brute'); at.think = 999; at.wdT = 999; game.enemies.push(at);
+        p.hp = 100; p.applyHit({ mode: 'burn', dmg: 40, attacker: at.id, aname: 'Brute' }); pa.ironskin = 100 - p.hp; pa.thorns = 160 - at.hp; clr();
+        // gold rush
+        const c0 = game.save.coins; game.save.passive.goldrush = true; game.addCoins(100); pa.goldrush = game.save.coins - c0;
+        // quick charge
+        reset(); game.save.passive.quickcharge = true; game.save.abil.dash = true; p.useAbility('dash'); pa.quickcharge = +p.cd.dash.toFixed(2);
+        // lifesteal + explosive hook
+        reset(); game.save.passive.lifesteal = true; game.save.passive.explosive = true;
+        const o12 = clearOff(15); const le = new Enemy(game, p.pos.clone().add(o12), 'brute'); le.think = 999; le.wdT = 999; game.enemies.push(le);
+        const le2 = new Enemy(game, p.pos.clone().add(o12).add(new THREE.Vector3(2, 0, 0)), 'brute'); le2.think = 999; le2.wdT = 999; game.enemies.push(le2); sim(0.2);
+        p.hp = 50; p.lastHurt = game.time; const lt = le.pos.clone(); lt.y += 1.2; aim(lt); p.shoot(); sim(0.4);
+        pa.lifesteal = Math.round((p.hp - 50) * 10) / 10; pa.explosiveSplash = 160 - le2.hp; clr();
+        // guardian angel
+        reset(); game.save.passive.angel = true; sim(0.5); const lg = p.lastGround && p.lastGround.clone();
+        p.pos.y -= 80; p.vel.set(0, -30, 0); p.onGround = false; sim(0.05);
+        pa.angel = { saved: lg ? p.pos.distanceTo(lg) < 3 : 'no ground', cd: Math.round(p.angelCd) };
+        // regen
+        reset(); game.save.passive.regen = true; p.hp = 40; p.lastHurt = game.time; sim(3); pa.regen3s = Math.round(p.hp);
+        // passive shop UI
+        game.shopMode = 'passive'; game.ui.renderShop(); pa.shopRows = document.querySelectorAll('#shopList .upg.passive').length; pa.shopTitle = document.getElementById('shopTitle').textContent;
+        game.shopMode = 'normal'; game.ui.renderShop();
+        pa.passiveShopsLoaded = (() => { let n = 0, t = 0; for (const b of game.world.built.values()) for (const I of game.world.getData(b.cx, b.cz).islands) if (I.shop) { t++; if (I.shop.passive) n++; } return n + '/' + t; })();
+        game.save.passive = {}; p.hp = 100;
+        log.passives = pa;
+        // music: render 6 s offline and measure it
+        try {
+          const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+          const oc = new OC(1, 44100 * 6, 44100);
+          const nb = oc.createBuffer(1, 44100 * 2, 44100); const nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+          const Mus = game.sfx.music.constructor; const mu = new Mus();
+          mu.setup(oc, oc.destination, nb);
+          mu.sec = 3; mu.bar = 0; mu.step = 0; // jump to the chorus
+          mu.t = 0.05; while (mu.t < 5.8) { mu.playStep(mu.t); mu.t += 0.1; mu.advance(); }
+          window.__musicPromise = oc.startRendering().then((buf) => {
+            const d = buf.getChannelData(0); let sq = 0, pk = 0; for (let i = 0; i < d.length; i++) { sq += d[i] * d[i]; pk = Math.max(pk, Math.abs(d[i])); }
+            return { rms: +Math.sqrt(sq / d.length).toFixed(3), peak: +pk.toFixed(2), loopMinutes: +((88 * 16 * 0.1) / 60).toFixed(2) };
+          });
+        } catch (err) { log.music = 'ERR ' + err.message; }
+      }
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
+    if (window.__musicPromise) window.__musicPromise.then((m) => { log.music = m; out.textContent = "AUTOTEST " + JSON.stringify(log); }, (e) => { log.music = 'ERR ' + e.message; out.textContent = "AUTOTEST " + JSON.stringify(log); });
     out.textContent = "AUTOTEST " + JSON.stringify(log);
     game.renderer.render = realRender;
   }, 500);

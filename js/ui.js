@@ -1,4 +1,4 @@
-import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES, abilityKey } from './upgrades.js';
+import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES, abilityKey, PASSIVES } from './upgrades.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,7 +14,18 @@ export class UI {
       el.value = game.sens();
       el.oninput = () => {
         game.save.sens = Math.round(parseFloat(el.value) * 10) / 10;
-        this.syncSens(); game.persist();
+        this.syncSens();
+    for (const id of ['musicVol', 'musicVol2']) {
+      $(id).value = Math.round((game.save.musicVol ?? 0.5) * 100);
+      $(id).oninput = (e) => {
+        game.save.musicVol = e.target.value / 100;
+        game.sfx.music.setVolume(game.save.musicVol);
+        for (const o of ['musicVol', 'musicVol2']) $(o).value = e.target.value;
+        for (const o of ['musicVal', 'musicVal2']) $(o).textContent = e.target.value + '%';
+        game.persist();
+      };
+    }
+    for (const o of ['musicVal', 'musicVal2']) $(o).textContent = Math.round((game.save.musicVol ?? 0.5) * 100) + '%'; game.persist();
       };
     }
     for (const id of ['invertY', 'invertY2']) {
@@ -109,8 +120,17 @@ export class UI {
     $('shopArrow').style.transform = `rotate(${angle}rad)`;
     $('shopDist').textContent = `SHOP ${Math.round(dist)}m`;
   }
-  shopPrompt(v) {
+  passArrow(angle, dist) {
+    const w = $('passArrowWrap');
+    if (angle === null) { w.classList.add('hidden'); return; }
+    w.classList.remove('hidden');
+    $('passArrow').style.transform = `rotate(${angle}rad)`;
+    $('passDist').textContent = `PASSIVES ${Math.round(dist)}m`;
+  }
+  shopPrompt(v, passive) {
     $('shopPrompt').classList.toggle('hidden', !v);
+    if (v) $('shopPrompt').innerHTML = this.touch ? (passive ? 'Tap ✦ PASSIVES to open the Passive Shop' : 'Tap 🛒 SHOP to open the shop') : (passive ? 'Press <b>E</b> to open the Passive Shop' : 'Press <b>E</b> to open the shop');
+    $('btnShop').textContent = passive ? '✦ PASSIVES' : '🛒 SHOP';
     $('btnShop').classList.toggle('hidden', !v);
   }
   crosshair(cls) {
@@ -204,6 +224,31 @@ export class UI {
     $('shopCoins').textContent = `🪙 ${g.save.coins} coins`;
     const list = $('shopList');
     list.innerHTML = '';
+    const passive = g.shopMode === 'passive';
+    $('shopTitle').textContent = passive ? '✦ Passive Shop' : '🛒 Grapple Shop';
+    $('shop').classList.toggle('passive', passive);
+    if (passive) {
+      const h = document.createElement('h3');
+      h.textContent = 'Passives: buy once, always active. No button needed.';
+      list.appendChild(h);
+      for (const P of PASSIVES) {
+        const owned = !!(g.save.passive || {})[P.key];
+        const row = document.createElement('div');
+        row.className = 'upg passive';
+        row.innerHTML = `<div class="uinfo"><div class="un">${P.icon} ${P.name}</div><div class="ud">${P.desc}</div></div>`;
+        const b = document.createElement('button');
+        b.textContent = owned ? '✓ OWNED' : `🪙 ${P.cost}`;
+        b.disabled = owned || g.save.coins < P.cost;
+        b.onclick = () => g.buyPassive(P.key);
+        row.appendChild(b);
+        list.appendChild(row);
+      }
+      return;
+    }
+    const hint = document.createElement('div');
+    hint.className = 'shopHint';
+    hint.textContent = '✦ Passives (like RUNNER) are sold in the rare purple PASSIVE SHOPS. Follow the purple arrow at the top.';
+    list.appendChild(hint);
     for (const u of UPGRADES) {
       const lv = g.save.up[u.key] || 0;
       const max = lv >= MAX_LEVEL;
