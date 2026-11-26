@@ -45,6 +45,9 @@ export class Enemy {
     this.bumpCool = 0; this.slamCool = 4; this.specialCool = 3 + Math.random() * 3;
     this.travelCool = 4 + Math.random() * 8;
     this.moveTarget = null; this.running = false; this.wanderT = 0; this.moving = false;
+    // status + anti-stuck bookkeeping
+    this.frozenT = 0; this.pounceT = 0; this.pounceAir = false; this.fuseT = 0;
+    this.wdT = 2; this.wdPos = this.pos.clone(); this.stuckN = 0; this.noLosT = 0; this.airStillT = 0; this.lastLos = null;
   }
 
   handPos(out) {
@@ -63,13 +66,35 @@ export class Enemy {
     if (this.dead) return;
     this.cool -= dt; this.slamCool -= dt; this.specialCool -= dt;
     if (this.pulseN > 0) { this.pulseT -= dt; if (this.pulseT <= 0) { this.pulseT = 1; this.pulseN--; this.game.enemyMagnet(this, 45); } } this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
-    if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
-    this.move(dt);
+    const frozen = this.frozenT > 0;
+    if (frozen) {
+      this.frozenT -= dt; this.moving = false; this.moveTarget = null;
+      if (this.onGround) { this.vel.x *= 0.85; this.vel.z *= 0.85; }
+      if (Math.random() < dt * 8) { this.center(_a); _a.x += (Math.random() - 0.5) * this.scale; _a.z += (Math.random() - 0.5) * this.scale; this.game.particles.burst(_a, 0xbfefff, 2, 2, 0.2); }
+    } else {
+      if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
+      this.move(dt);
+    }
     integrate(this, dt, this.game.world);
-    wallClimb(this, 9, 13);
+    if (!this.onGround && !this.inWater && this.vel.lengthSq() < 4) this.airStillT += dt; else this.airStillT = 0;
+    // scramble up walls while chasing (bigger bodies reach higher)
+    if (this.hitWall && this.moveTarget) this.climbT = Math.max(this.climbT, 0.3);
+    wallClimb(this, 9 * Math.max(1, this.scale * 0.7), 13);
     if (this.hitWall && this.onGround && this.moveTarget) this.vel.y = 8.5;
     this.updateHook(dt);
+    if (this.pounceT > 0) {
+      this.pounceT -= dt;
+      if (!this.onGround) this.pounceAir = true;
+      else if (this.pounceAir) { this.pounceT = 0; this.pounceAir = false; this.game.landSlam(this); }
+    }
+    if (this.fuseT > 0) {
+      this.fuseT -= dt;
+      if (Math.random() < dt * 30) { this.center(_a); this.game.particles.burst(_a, Math.random() < 0.5 ? 0xffd23a : 0xff3a1a, 2, 5, 0.15); }
+      if (this.fuseT <= 0) { this.center(_a); this.game.enemyExplode(_a.clone(), this, 9); this.lastAttacker = null; this.die(); return; }
+    }
+    if (!frozen) this.antiStuck(dt);
     if (this.pos.y < KILL_Y) this.die();
+    if (this.dead) return;
     // visuals
     const m = this.model;
     m.group.position.copy(this.pos);
@@ -167,7 +192,8 @@ export class Enemy {
         if (p) { this.shoot(p, 'travel'); return; }
       }
     }
-    if (!this.onGround) return;
+    // in water or wedged mid-air (resting on a branch/ledge) still counts as standing: keep thinking
+    if (!this.onGround && !this.inWater && this.airStillT < 0.5) return;
     const tg = g.findTarget(this, 150);
     if (tg) {
       this.targetId = tg.id;
@@ -176,6 +202,17 @@ export class Enemy {
       this.yaw = Math.atan2(-_a.x, -_a.z);
       this.pitch = Math.atan2(_a.y, Math.hypot(_a.x, _a.z));
       const T = this.T;
+      const vis = this.los(tg);
+      this.lastLos = vis;
+      if (T.bossKind === 'inferno' && this.specialCool <= 0) {
+        this.specialCool = 5.5; this.infN = (this.infN || 0) + 1;
+        if (this.infN % 2 && d < 100) { g.meteorRain(this, tg.pos, 6, 14, true); return; }
+        if (d > 10 && d < 80) { this.pounce(tg, 38, 10); return; }
+      }
+      if (T.special === 'pounce' && this.specialCool <= 0 && d > 8 && d < 45 && tg.ground) { this.specialCool = T.specialCd; this.pounce(tg, 30, 8); return; }
+      if (T.special === 'heal' && this.specialCool <= 0 && g.enemyHeal(this)) this.specialCool = T.specialCd;
+      if (T.special === 'boom' && d < 6.5 && this.fuseT <= 0) { this.fuseT = 0.7; g.sfx.near('cancel', me); }
+      if (T.special === 'boom' && this.fuseT <= 0 && this.specialCool <= 0 && d > 7 && d < 40 && vis) { this.specialCool = 3.5; this.pounce(tg, 34, 4); return; }
       if (T.bossKind === 'titan' && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
       if (T.bossKind === 'thunder' && this.specialCool <= 0 && d < 90) { this.specialCool = 4.5; g.enemyLightning(this, tg); return; }
       if (T.bossKind === 'void' && this.specialCool <= 0 && d < 45) { this.specialCool = 7; this.pulseN = 3; this.pulseT = 0; }
@@ -205,7 +242,7 @@ export class Enemy {
       }
       const tgIsland = tg.ground || null;
       const sameIsland = tgIsland && tgIsland === this.ground;
-      if (h.state === HOOK.IDLE && this.cool <= 0 && d < this.T.range * 0.95 && this.los(tg)) {
+      if (h.state === HOOK.IDLE && this.cool <= 0 && d < this.T.range * 0.95 && vis) {
         const risky = this.edgeT() > 0.72;
         const W = T.w;
         const opts = [['pull', W.pull], ['swap', W.swap * (risky ? 1.6 : 1)], ['bomb', d > 10 ? W.bomb || 0 : 0], ['approach', W.approach]];
@@ -251,6 +288,71 @@ export class Enemy {
         this.wanderT = 3 + Math.random() * 5;
         if (this.ground) this.moveTarget = this.ground.pointAt(Math.random() * TAU, Math.random() * 0.7);
       }
+    }
+  }
+
+  pounce(tg, spd, up) {
+    _b.copy(tg.pos); _b.y += 0.5;
+    launchTo(this, this.pos, _b, spd, up, true);
+    this.pounceT = 3; this.pounceAir = false; this.climbT = 1; this.moveTarget = null;
+    this.game.sfx.near('zip', this.pos);
+  }
+
+  // Anti-stuck watchdog: every 2 s check whether we actually got anywhere. If a bot with a target is
+  // wedged on a wall, stuck at a cliff edge, stuck in a pond or can't see its target, it grapples
+  // next to the target, hops over the obstacle, or (after several failed tries) blinks to a free spot.
+  antiStuck(dt) {
+    const g = this.game, h = this.hook;
+    if (this.targetId && this.lastLos === false && h.state === HOOK.IDLE) this.noLosT += dt; else this.noLosT = 0;
+    this.wdT -= dt;
+    if (this.wdT > 0) return;
+    this.wdT = 2;
+    const moved = this.pos.distanceTo(this.wdPos);
+    this.wdPos.copy(this.pos);
+    const tg = this.targetId ? g.getEntity(this.targetId) : null;
+    if (!tg || tg.dead || h.state !== HOOK.IDLE || this.pounceT > 0) { this.stuckN = 0; return; }
+    const d = tg.pos.distanceTo(this.pos);
+    const happySniper = this.T.keepAway && d > 10 && this.lastLos !== false;
+    const stuck = (moved < 1.5 && d > 6 && !happySniper) || this.noLosT > 3.5;
+    if (!stuck) { this.stuckN = 0; return; }
+    this.stuckN++; this.noLosT = 0;
+    this.unstick(tg);
+  }
+  unstick(tg) {
+    const g = this.game, w = g.world;
+    this.stuckCount = (this.stuckCount || 0) + 1;
+    if (this.stuckN < 3) {
+      // 1) grapple to a spot right next to the target (a wall in the way is fine: we climb it)
+      for (let i = 0; i < 6; i++) {
+        const a = Math.random() * TAU, r = 2 + Math.random() * 4;
+        const x = tg.pos.x + Math.cos(a) * r, z = tg.pos.z + Math.sin(a) * r;
+        const gy = w.groundAt(x, tg.pos.y + 3, z);
+        if (gy === null || Math.abs(gy - tg.pos.y) > 6) continue;
+        const p = new V(x, gy + 0.6, z);
+        if (p.distanceTo(this.pos) > this.T.range * 0.95) break;
+        this.shoot(p, 'travel'); this.climbT = 1.5;
+        return;
+      }
+      // 2) hop up and over whatever is blocking
+      _b.subVectors(tg.pos, this.pos).setY(0);
+      if (_b.lengthSq() < 1e-3) _b.set(1, 0, 0);
+      _b.normalize();
+      this.vel.set(_b.x * 9, 15, _b.z * 9);
+      this.onGround = false; this.pos.y += 0.1; this.climbT = 1.2; this.braking = false;
+      return;
+    }
+    // 3) several failed tries in a row: blink to free ground near the target
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * TAU, r = 7 + Math.random() * 7;
+      const x = tg.pos.x + Math.cos(a) * r, z = tg.pos.z + Math.sin(a) * r;
+      const gy = w.groundAt(x, tg.pos.y + 6, z);
+      if (gy === null || Math.abs(gy - tg.pos.y) > 8) continue;
+      this.center(_a); g.particles.burst(_a, 0xff6a6a, 16, 6, 0.2);
+      this.pos.set(x, gy + 0.3, z); this.vel.set(0, 0, 0); this.braking = false;
+      this.center(_a); g.particles.burst(_a, 0xff6a6a, 16, 6, 0.2);
+      g.sfx.near('cancel', this.pos);
+      this.stuckN = 0; this.think = 0.1;
+      return;
     }
   }
 
@@ -313,7 +415,7 @@ export class Enemy {
     h.state = HOOK.LATCHED; h.target = ent.id; h.t = 0;
     if (h.mode === 'pull') {
       _a.copy(this.pos); _a.y += 1.2;
-      g.deliverHit(ent.id, { mode: 'pull', dmg: Math.round(10 * this.T.dmg), a: _a.toArray(), attacker: this.id, aname: this.name });
+      g.deliverHit(ent.id, { mode: 'pull', dmg: Math.round(10 * this.T.dmg), a: _a.toArray(), attacker: this.id, aname: this.name, freeze: this.T.freeze || 0 });
     } else if (h.mode === 'swap') {
       const mine = this.pos.clone(); mine.y += 0.5;
       const theirs = ent.pos.clone(); theirs.y += 1;
@@ -330,6 +432,11 @@ export class Enemy {
     this.hp -= hit.dmg || 0;
     this.model.hit();
     this.cool = Math.min(this.cool, 0.6);
+    if (hit.freeze) {
+      this.frozenT = Math.max(this.frozenT, this.T.boss ? hit.freeze * 0.4 : hit.freeze);
+      this.moveTarget = null; this.fuseT = 0;
+      if (this.hook.state === HOOK.FLYING) this.hook.state = HOOK.RETRACT;
+    }
     if (this.T.boss) { /* immovable */ } else if (hit.mode === 'yank' || hit.mode === 'pull') {
       _a.fromArray(hit.a);
       launchTo(this, this.pos, _a, hit.spd || 44, 1, hit.mode === 'pull' || !!hit.parry);
@@ -350,6 +457,16 @@ export class Enemy {
     this.dead = true;
     _a.copy(this.pos); _a.y += 0.7;
     this.game.particles.burst(_a, 0xe2372f, 26, 9, 0.35);
+    if (this.T.split && this.pos.y > KILL_Y + 30) {
+      const g = this.game, at = this.pos.clone(), kind = this.T.split;
+      g.spawnQueue.push(() => {
+        for (let i = 0; i < 2; i++) {
+          const m = new Enemy(g, at.clone().add(new V(i ? 1.2 : -1.2, 0.5, 0)), kind);
+          m.vel.set(i ? 6 : -6, 8, 0);
+          g.enemies.push(m);
+        }
+      });
+    }
     this.game.onEnemyDeath(this);
     this.dispose();
   }

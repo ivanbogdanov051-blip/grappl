@@ -1,4 +1,4 @@
-import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES } from './upgrades.js';
+import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES, abilityKey } from './upgrades.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -151,15 +151,31 @@ export class UI {
   deathCount(n) { $('deathCount').textContent = n; }
   hideDeath() { $('death').classList.add('hidden'); }
 
+  // the normal-ability button bar holds a limited number of buttons (10 on phones, 12 on PC; PARRY has its own spot)
+  maxBar() { return this.touch ? 10 : 12; }
+  onBar(A) { const s = this.g.save; return !!s.abil[A.key] && !A.rare && (A.key === 'parry' || !(s.hidden || {})[A.key]); }
+  barCount() { return ABILITIES.filter((A) => A.key !== 'parry' && this.onBar(A)).length; }
+  toggleBar(key) {
+    const s = this.g.save; s.hidden = s.hidden || {};
+    if (s.hidden[key]) {
+      if (this.barCount() >= this.maxBar()) { this.toast(`Bar is full (${this.maxBar()}): take one off first`); return; }
+      delete s.hidden[key];
+    } else s.hidden[key] = true;
+    this.g.persist(); this.renderShop(); this.renderAbilities();
+  }
+  fx(id, on) { const el = $(id); if (el) el.style.opacity = on ? 1 : 0; }
   renderAbilities() {
     const g = this.g, bar = $('abilities'), rareBar = $('rareAbilities');
     bar.innerHTML = ''; rareBar.innerHTML = '';
     this.abBtns = {};
-    ABILITIES.forEach((A, i) => {
+    let shown = 0;
+    ABILITIES.forEach((A) => {
       if (!g.save.abil[A.key]) return;
+      if (!A.rare && !this.onBar(A)) return;
+      if (!A.rare && A.key !== 'parry' && ++shown > this.maxBar()) { g.save.hidden[A.key] = true; return; }
       const b = document.createElement('button');
       b.className = 'ab ' + A.key;
-      b.innerHTML = `<span class="ai">${A.icon}</span><span class="ak">${A.hk || (i + 1) % 10}</span><span class="acd"></span>`;
+      b.innerHTML = `<span class="ai">${A.icon}</span><span class="ak">${abilityKey(A)}</span><span class="acd"></span>`;
       b.title = A.name;
       const fire = (e) => { e.preventDefault(); e.stopPropagation(); g.useAbility(A.key); };
       b.addEventListener('touchstart', fire, { passive: false });
@@ -177,7 +193,7 @@ export class UI {
       o.cd.style.height = (left / o.max) * 100 + '%';
       o.cd.textContent = left > 0 ? Math.ceil(left) : '';
       o.b.classList.toggle('ready', left <= 0);
-      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0));
+      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0) || (k === 'cloak' && p.cloakT > 0) || (k === 'jetpack' && p.jetT > 0) || (k === 'vampire' && p.vampT > 0) || (k === 'rage' && p.rageT > 0) || (k === 'timewarp' && this.g.warpT > 0));
     }
   }
   openShop() { this.renderShop(); $('shop').classList.remove('hidden'); }
@@ -204,18 +220,25 @@ export class UI {
       list.appendChild(row);
     }
     const h = document.createElement('h3');
-    h.textContent = 'Abilities: buy once, then use their button (PC keys 1–9, 0 and R)';
+    h.textContent = `Abilities: buy once, then use their button. Button bar: ${this.barCount()}/${this.maxBar()}${this.touch ? '' : ' (PC: every owned ability works on its key)'}`;
     list.appendChild(h);
-    ABILITIES.forEach((A, i) => {
+    ABILITIES.forEach((A) => {
       if (A.rare) return;
       const owned = !!g.save.abil[A.key];
       const row = document.createElement('div');
       row.className = 'upg ability';
-      row.innerHTML = `<div class="uinfo"><div class="un">${A.icon} ${A.name} <span class="pips">key ${A.hk || (i + 1) % 10} · ${A.cd}s cooldown</span></div><div class="ud">${A.desc}</div></div>`;
+      row.innerHTML = `<div class="uinfo"><div class="un">${A.icon} ${A.name} <span class="pips">key ${abilityKey(A)} · ${A.cd}s cooldown</span></div><div class="ud">${A.desc}</div></div>`;
       const b = document.createElement('button');
-      b.textContent = owned ? 'OWNED' : `🪙 ${A.cost}`;
-      b.disabled = owned || g.save.coins < A.cost;
-      b.onclick = () => g.buyAbility(A.key);
+      if (owned && A.key !== 'parry') {
+        const on = this.onBar(A);
+        b.textContent = on ? '✓ ON BAR' : '+ ADD TO BAR';
+        b.className = on ? 'onbar' : 'offbar';
+        b.onclick = () => this.toggleBar(A.key);
+      } else {
+        b.textContent = owned ? 'OWNED' : `🪙 ${A.cost}`;
+        b.disabled = owned || g.save.coins < A.cost;
+        b.onclick = () => g.buyAbility(A.key);
+      }
       row.appendChild(b);
       list.appendChild(row);
     });

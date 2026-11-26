@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { integrate, launchTo, wallClimb } from './entity.js';
-import { KILL_Y, SPAWN, inSafeZone } from './world.js';
+import { KILL_Y, SPAWN, G, inSafeZone } from './world.js';
 import { ABILITY } from './upgrades.js';
 
 const V = THREE.Vector3;
@@ -23,6 +23,7 @@ export class Player {
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
     this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -44,6 +45,7 @@ export class Player {
     this.lastAttacker = null;
     this.climbT = 0;
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -189,6 +191,83 @@ export class Player {
         if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
         if (!g.fireMissiles(this)) { g.ui.toast('🐝 No targets within 70 m'); return false; }
         break;
+      case 'fireball': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        g.fireBolt(this, f);
+        break;
+      }
+      case 'frost': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        let n = 0;
+        const fr = (ent) => {
+          if (ent.dead || ent === this || ent.pos.distanceTo(this.pos) > 16) return;
+          const dx = ent.pos.x - this.pos.x, dz = ent.pos.z - this.pos.z, l = Math.hypot(dx, dz) || 1;
+          g.deliverHit(ent.id, { mode: 'bump', dmg: 10, k: 0.3, d: [dx / l, 0, dz / l], freeze: 3, attacker: this.id, aname: g.name });
+          n++;
+        };
+        g.enemies.forEach(fr); g.remotes.forEach(fr);
+        _a.copy(this.pos); _a.y += 0.6;
+        g.particles.burst(_a, 0xbfefff, 50, 16, 0.35); g.particles.burst(_a, 0xffffff, 20, 9, 0.25);
+        g.sfx.parry(); g.ui.toast(n ? `❄️ Froze ${n}!` : '❄️ Nobody in range');
+        break;
+      }
+      case 'cloak':
+        this.cloakT = 5;
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xdddddd, 20, 5, 0.3);
+        g.sfx.cancel(); g.ui.toast('👻 Invisible for 5 s');
+        break;
+      case 'chain':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        if (!g.chainLightning(this)) { g.ui.toast('🌩️ No enemy within 35 m'); return false; }
+        break;
+      case 'tornado': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        let n = 0;
+        const tw = (ent) => {
+          if (ent.dead || ent === this || ent.pos.distanceTo(this.pos) > 14) return;
+          const dx = ent.pos.x - this.pos.x, dz = ent.pos.z - this.pos.z, l = Math.hypot(dx, dz) || 1;
+          g.deliverHit(ent.id, { mode: 'bump', dmg: 12, k: 4.2, d: [dx / l * 0.18, 0, dz / l * 0.18], attacker: this.id, aname: g.name });
+          n++;
+        };
+        g.enemies.forEach(tw); g.remotes.forEach(tw);
+        for (let i = 0; i < 6; i++) { _a.copy(this.pos); _a.y += i * 1.5; g.particles.burst(_a, 0xd8e4ee, 12, 6 + i, 0.3); }
+        g.sfx.zip(); g.shake(0.3); g.ui.toast(n ? `🌪️ Launched ${n}!` : '🌪️ Nobody in range');
+        break;
+      }
+      case 'mine':
+        if (this.safe) { g.ui.toast('🛡️ No mines in the safe zone'); return false; }
+        g.placeMine(this);
+        break;
+      case 'timewarp':
+        g.warpT = 5;
+        g.sfx.parry(); g.ui.toast('⏳ Time slowed!');
+        break;
+      case 'jetpack':
+        this.jetT = 2.5;
+        if (this.onGround) { this.pos.y += 0.1; this.vel.y = 8; this.onGround = false; }
+        this.braking = false;
+        g.sfx.zip(); g.ui.toast('🚀 Jetpack! Look where you want to fly');
+        break;
+      case 'vampire':
+        this.vampT = 6;
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xb0002a, 22, 6, 0.25);
+        g.sfx.buy(); g.ui.toast('🩸 Vampire: hits heal you');
+        break;
+      case 'rage':
+        this.rageT = 5;
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xff3a1a, 26, 8, 0.25);
+        g.sfx.hurt(); g.shake(0.3); g.ui.toast('😡 RAGE: double damage!');
+        break;
+      case 'meteor': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const o = g.camera.position;
+        const wh = g.world.raycast(o, f, 120);
+        let pt = wh ? wh.point.clone() : o.clone().addScaledVector(f, 60);
+        const eh = g.hitTestEntities(o, f, wh ? wh.dist : 120, this.id, false);
+        if (eh) pt = o.clone().addScaledVector(f, eh.dist);
+        g.meteorRain(this, pt, 7, 9, false);
+        break;
+      }
       case 'parry':
         this.parryT = 2; this.parried.clear();
         _a.copy(this.pos); _a.y += 0.8;
@@ -250,6 +329,7 @@ export class Player {
     this.hp -= hit.dmg || 0;
     this.lastHurt = g.time;
     g.hurtFlash(); g.shake(0.5); g.sfx.hurt();
+    if (hit.freeze) { this.slowT = Math.max(this.slowT, hit.freeze); g.ui.toast(`❄️ Frozen by ${hit.aname}! You're slowed`); }
     if (hit.mode === 'pull' || hit.mode === 'yank') {
       _a.fromArray(hit.a);
       launchTo(this, this.pos, _a, hit.spd || (hit.mode === 'yank' ? 44 : 38), hit.mode === 'yank' ? 1 : 3, hit.mode === 'pull' || !!hit.parry);
@@ -286,7 +366,7 @@ export class Player {
     const wl = Math.hypot(wx, wz);
     if (wl > 1) { wx /= wl; wz /= wl; }
     const running = input.run || input.stickMag > 0.92;
-    const maxSp = running ? s.speed : 7;
+    const maxSp = (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1);
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (this.onGround) {
       if (hs > maxSp + 1) {
@@ -313,6 +393,16 @@ export class Player {
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
     if (this.shieldT > 0) this.shieldT -= dt;
     if (this.parryT > 0) this.parryT -= dt;
+    for (const k of ['slowT', 'cloakT', 'vampT', 'rageT']) if (this[k] > 0) this[k] -= dt;
+    if (this.jetT > 0) {
+      this.jetT -= dt;
+      const jf = this.forward(_c);
+      _a.set(jf.x * 27, Math.max(jf.y * 27, 3), jf.z * 27);
+      this.vel.lerp(_a, Math.min(1, 3.5 * dt));
+      this.vel.y += G * dt; // cancel gravity while the jets fire
+      this.braking = false;
+      if (Math.random() < dt * 40) { _b.copy(this.pos); g.particles.burst(_b, Math.random() < 0.5 ? 0xffb020 : 0xff5a1a, 2, 4, 0.2); }
+    }
     if (this.glideT > 0) { this.glideT -= dt; if (this.onGround && this.glideT < 5.7) this.glideT = 0; else if (this.vel.y < -3.5) this.vel.y = -3.5; }
     if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
     this.histT -= dt;

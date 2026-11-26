@@ -1,4 +1,7 @@
 // Keyboard + mouse (pointer lock) and touch (joystick, drag-look, buttons)
+import { ABILITIES, abilityKey } from './upgrades.js';
+const KEYMAP = {};
+for (const A of ABILITIES) { const k = abilityKey(A); KEYMAP[/\d/.test(k) ? 'Digit' + k : 'Key' + k] = A.key; }
 export class Input {
   constructor(game, canvas, isTouch) {
     this.game = game; this.canvas = canvas; this.touch = isTouch;
@@ -15,7 +18,7 @@ export class Input {
       if (e.code === 'KeyQ' || e.code === 'KeyX') game.cancelHook();
       if (e.code === 'KeyE') game.interact();
       if (e.code === 'KeyF') game.shootHook();
-      const ak = { Digit1: 'swap', Digit2: 'leap', Digit3: 'dash', Digit4: 'shock', Digit5: 'rewind', Digit6: 'magnet', Digit7: 'shield', Digit8: 'glide', Digit9: 'bomb', Digit0: 'heal', KeyR: 'parry', KeyC: 'titanslam', KeyV: 'thunder', KeyB: 'blackhole', KeyN: 'missiles' }[e.code];
+      const ak = KEYMAP[e.code];
       if (ak) game.useAbility(ak);
       if (e.code === 'KeyM') game.ui.toast(game.sfx.toggleMute() ? '🔇 Muted' : '🔊 Sound on');
     });

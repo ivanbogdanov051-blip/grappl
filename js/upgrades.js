@@ -39,6 +39,16 @@ export const ABILITIES = [
   { key: 'bomb', icon: '💣', name: 'Hook Bomb', cost: 55, cd: 7, desc: 'Fire an exploding hook: up to 40 dmg and big knockback in 9 m. Blast yourself for a rocket jump!' },
   { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
   { key: 'parry', icon: '⚔️', name: 'PARRY', cost: 200, cd: 10, hk: 'R', desc: 'For 2 seconds nothing can hurt you. Anyone who hits you gets launched at you at super speed and takes 50 damage. (You deal no damage while parrying.)' },
+  { key: 'fireball', icon: '🔥', name: 'Fireball', cost: 45, cd: 5, hk: 'T', desc: 'Throw a fireball straight where you aim. Explodes for up to 35 dmg in 5 m.' },
+  { key: 'frost', icon: '❄️', name: 'Frost Nova', cost: 45, cd: 10, hk: 'Y', desc: 'Freeze everyone within 16 m for 3 s (10 dmg). Frozen enemies can\'t move or shoot. Bosses thaw faster.' },
+  { key: 'cloak', icon: '👻', name: 'Cloak', cost: 40, cd: 18, hk: 'U', desc: 'Turn invisible for 5 s: bots lose track of you and stop attacking.' },
+  { key: 'chain', icon: '🌩️', name: 'Chain Lightning', cost: 50, cd: 9, hk: 'I', desc: 'Zap the nearest enemy within 35 m. It jumps to 3 more nearby (25 dmg each).' },
+  { key: 'tornado', icon: '🌪️', name: 'Tornado', cost: 35, cd: 10, hk: 'O', desc: 'Throw everyone within 14 m high into the air (12 dmg). Great for knocking them off islands.' },
+  { key: 'mine', icon: '🧨', name: 'Sky Mine', cost: 30, cd: 6, hk: 'P', desc: 'Drop a mine at your feet. Explodes when someone steps near (45 dmg). Up to 3 at once.' },
+  { key: 'timewarp', icon: '⏳', name: 'Time Warp', cost: 60, cd: 22, hk: 'G', desc: 'Slow down every bot around you to 30% speed for 5 s.' },
+  { key: 'jetpack', icon: '🚀', name: 'Jetpack', cost: 40, cd: 12, hk: 'H', desc: 'Fly wherever you look for 2.5 s.' },
+  { key: 'vampire', icon: '🩸', name: 'Vampire', cost: 40, cd: 16, hk: 'J', desc: 'For 6 s you heal half of all the damage you deal.' },
+  { key: 'rage', icon: '😡', name: 'Rage', cost: 50, cd: 15, hk: 'K', desc: 'For 5 s everything you do deals double damage.' },
 ];
 // Rare abilities: only dropped by bosses
 ABILITIES.push(
@@ -46,5 +56,8 @@ ABILITIES.push(
   { key: 'thunder', icon: '⚡', name: 'Thunder Strike', rare: 'THUNDER KING', cost: 0, cd: 10, hk: 'V', desc: 'Call lightning where you aim (up to 120 m): up to 45 dmg in 7 m.' },
   { key: 'blackhole', icon: '🌀', name: 'Black Hole', rare: 'VOID MAW', cost: 0, cd: 18, hk: 'B', desc: 'Open a black hole where you aim. It sucks in enemies and players for 3 s, then bursts.' },
   { key: 'missiles', icon: '🐝', name: 'Hive Missiles', rare: 'HIVE QUEEN', cost: 0, cd: 14, hk: 'N', desc: 'Launch 4 homing stingers at the nearest targets (30 dmg each).' },
+  { key: 'meteor', icon: '☄️', name: 'Meteor Storm', rare: 'INFERNO LORD', cost: 0, cd: 16, hk: 'Z', desc: 'Rain 7 meteors down where you aim (30 dmg each in 5 m).' },
 );
 export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));
+// keyboard key for every ability (first ten use 1-9, 0)
+export const abilityKey = (A) => A.hk || String((ABILITIES.indexOf(A) + 1) % 10);

@@ -27,7 +27,7 @@ Open the GitHub Pages link in Chrome or Edge (PC or Android) and press **📲 In
 | Shoot hook → **Pull** | left click (or F) | SHOOT → PULL button |
 | Cancel hook | right click / Q | ✕ button |
 | Shop (when near one) | E | SHOP button |
-| Abilities | keys 1–9, 0 and R (or click the icons) | ability buttons at the bottom |
+| Abilities | keys 1–9, 0, R, T Y U I O P G H J K, boss drops C V B N Z (or click the icons) | ability buttons at the bottom |
 | Mute | M | |
 
 ## How the hook works
@@ -40,7 +40,7 @@ Open the GitHub Pages link in Chrome or Edge (PC or Android) and press **📲 In
 
 ## Enemies (red)
 
-Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and do the dangerous **swap**: they fly to you while you get flung to where they were standing. Knocked-off enemies try to grapple back to safety.
+Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and do the dangerous **swap**: they fly to you while you get flung to where they were standing. Knocked-off enemies try to grapple back to safety. Bots that get stuck (on a wall, at a cliff edge, in a pond, or with no line of sight to you) notice within a couple of seconds: they grapple right next to you, hop over the obstacle, or after a few failed tries blink to open ground near you. Camping in a spot they can't reach no longer works.
 
 ## Enemy types
 
@@ -53,6 +53,12 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | Bomber | orange | 70 | 40 | Throws exploding hooks (up to 32 damage, knockback) |
 | Magnetron | purple | 90 | 45 | Every 7 s yanks every player within 32 m to itself |
 | Phantom | see-through blue | 50 | 45 | Teleports right behind you, then shoves you |
+| Frostbite | icy blue | 65 | 45 | Its hook freezes you: you move at 45% speed for 2.5 s |
+| Leaper | orange-red | 70 | 45 | Pounces through the air at you and ground-slams where it lands |
+| Splitter | magenta, big | 90 | 40 | Splits into 2 fast Splitlings (22 HP, 15 coins each) when it dies |
+| Medic | light pink | 55 | 50 | Stays back and heals nearby enemies (bosses too). Kill it first! |
+| Kamikaze | bright red, small | 35 | 35 | Dives at you, sparks for 0.7 s, then explodes (9 m). Kill it, freeze it or get away |
+| 👑 **Inferno Lord** (boss) | orange-red giant | 950 | 350 | Rains meteors on you (red rings, so move!) and leaps across islands to slam down next to you. Drops **☄️ Meteor Storm** |
 | 👑 **Thunder King** (boss) | blue giant | 850 | 300 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
 | 👑 **Void Maw** (boss) | black-purple giant | 1000 | 350 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
 | 👑 **Hive Queen** (boss) | gold giant | 750 | 300 | Exploding hooks and summons Zippers/Bombers. Drops **🐝 Hive Missiles** |
@@ -78,7 +84,19 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | 8 | 🪂 Glide | 12 s | Slow fall with free steering for 6 s |
 | 9 | 💣 Hook Bomb | 7 s | An exploding hook: up to 40 damage and knockback in 9 m. Blast yourself for a rocket jump |
 | 0 | 💚 Heal | 20 s | Restores 50 health instantly |
+| T | 🔥 Fireball | 5 s | A fireball straight where you aim, up to 35 damage in 5 m |
+| Y | ❄️ Frost Nova | 10 s | Freezes everyone within 16 m for 3 s (10 damage). Frozen bots can't move or shoot; bosses thaw faster |
+| U | 👻 Cloak | 18 s | Invisible for 5 s: bots lose track of you |
+| I | 🌩️ Chain Lightning | 9 s | Zaps the nearest enemy within 35 m and jumps to 3 more (25 damage each) |
+| O | 🌪️ Tornado | 10 s | Throws everyone within 14 m high into the air (12 damage) |
+| P | 🧨 Sky Mine | 6 s | Drops a mine that explodes when someone comes near (45 damage). Up to 3 at once |
+| G | ⏳ Time Warp | 22 s | Slows every bot around you to 30% speed for 5 s |
+| H | 🚀 Jetpack | 12 s | Fly wherever you look for 2.5 s |
+| J | 🩸 Vampire | 16 s | For 6 s you heal half of the damage you deal |
+| K | 😡 Rage | 15 s | For 5 s you deal double damage |
 | R | ⚔️ **PARRY** (200 coins) | 10 s | For 2 s you can't be hurt, and anyone who hits you gets launched at you at super speed and takes 50 damage. You deal no damage while parrying |
+
+**Button bar:** it holds 10 abilities on phones and 12 on PC (PARRY always has its own button). In the shop, owned abilities have an **✓ ON BAR / + ADD TO BAR** button to choose which ones get a button. On PC every owned ability works on its key either way.
 
 ## Rare abilities (boss drops)
 
@@ -90,6 +108,7 @@ Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock
 | V | ⚡ Thunder Strike: lightning where you aim, up to 45 damage | 10 s | Thunder King |
 | B | 🌀 Black Hole: sucks everyone in for 3 s, then bursts | 18 s | Void Maw |
 | N | 🐝 Hive Missiles: 4 homing stingers, 30 damage each | 14 s | Hive Queen |
+| Z | ☄️ Meteor Storm: 7 meteors rain down where you aim, 30 damage each | 16 s | Inferno Lord |
 
 ## Multiplayer
 

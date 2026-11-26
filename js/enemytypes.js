@@ -35,6 +35,36 @@ export const ENEMY_TYPES = {
     hookSpeed: 110, range: 90, cool: [2, 3.5], dmg: 1, bumpDmg: 14, bumpK: 1.9,
     w: { pull: 0.3, swap: 0.4, approach: 0.3 }, special: 'blink', specialCd: 6, ghost: true, spawn: 10,
   },
+  frost: {
+    name: 'Frostbite', color: 0x6fc8ff, scale: 1, hp: 65, reward: 45, walk: 5, run: 10.5,
+    hookSpeed: 115, range: 105, cool: [2, 3.4], dmg: 1, bumpDmg: 8, bumpK: 1,
+    w: { pull: 0.7, swap: 0.1, approach: 0.2 }, freeze: 2.5, spawn: 10,
+  },
+  leaper: {
+    name: 'Leaper', color: 0xff6a2a, scale: 0.95, hp: 70, reward: 45, walk: 6, run: 12.5,
+    hookSpeed: 100, range: 90, cool: [2.2, 3.8], dmg: 1, bumpDmg: 10, bumpK: 1.3,
+    w: { pull: 0.35, swap: 0.25, approach: 0.4 }, special: 'pounce', specialCd: 5, spawn: 10,
+  },
+  splitter: {
+    name: 'Splitter', color: 0xc2185b, scale: 1.35, hp: 90, reward: 40, walk: 4.5, run: 9.5,
+    hookSpeed: 95, range: 95, cool: [2.4, 4], dmg: 1.1, bumpDmg: 12, bumpK: 1.4,
+    w: { pull: 0.5, swap: 0.2, approach: 0.3 }, split: 'mini', spawn: 9,
+  },
+  mini: {
+    name: 'Splitling', color: 0xff4f7a, scale: 0.6, hp: 22, reward: 15, walk: 7, run: 14,
+    hookSpeed: 110, range: 70, cool: [1.5, 3], dmg: 0.7, bumpDmg: 6, bumpK: 0.8,
+    w: { pull: 0.4, swap: 0.3, approach: 0.3 }, spawn: 0,
+  },
+  medic: {
+    name: 'Medic', color: 0xff8fc8, scale: 0.9, hp: 55, reward: 50, walk: 5, run: 10,
+    hookSpeed: 100, range: 110, cool: [3, 5], dmg: 1, bumpDmg: 6, bumpK: 1,
+    w: { pull: 0.6, swap: 0, approach: 0.4 }, special: 'heal', specialCd: 4, keepAway: 22, spawn: 8,
+  },
+  kamikaze: {
+    name: 'Kamikaze', color: 0xff1a00, scale: 0.85, hp: 35, reward: 35, walk: 7.5, run: 15,
+    hookSpeed: 130, range: 100, cool: [1.4, 2.4], dmg: 1, bumpDmg: 4, bumpK: 1,
+    w: { pull: 0, swap: 0, approach: 1 }, special: 'boom', spawn: 9,
+  },
   titan: {
     name: 'SKY TITAN', color: 0x4a0d0d, scale: 3.4, hp: 900, reward: 300, walk: 4, run: 9,
     hookSpeed: 120, range: 140, cool: [1.6, 2.8], dmg: 2, bumpDmg: 25, bumpK: 2.6,
@@ -54,6 +84,11 @@ export const ENEMY_TYPES = {
     name: 'HIVE QUEEN', color: 0xc99a0e, scale: 3, hp: 750, reward: 300, walk: 4, run: 9,
     hookSpeed: 90, range: 130, cool: [1.8, 3], dmg: 1.4, bumpDmg: 20, bumpK: 2,
     w: { pull: 0.2, swap: 0, bomb: 0.6, approach: 0.2 }, boss: true, bossKind: 'hive', drop: 'missiles', spawn: 0,
+  },
+  inferno: {
+    name: 'INFERNO LORD', color: 0xd8400a, scale: 3.2, hp: 950, reward: 350, walk: 4.5, run: 10,
+    hookSpeed: 120, range: 140, cool: [1.8, 3], dmg: 1.8, bumpDmg: 24, bumpK: 2.4,
+    w: { pull: 0.5, swap: 0.2, approach: 0.3 }, boss: true, bossKind: 'inferno', drop: 'meteor', spawn: 0,
   },
 };
 export const ENEMY_KEYS = Object.keys(ENEMY_TYPES);

@@ -16,7 +16,7 @@ import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope } from './models.js';
-import { computeStats, COSTS, MAX_LEVEL, ABILITY } from './upgrades.js';
+import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES } from './upgrades.js';
 import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
 
 window.__errs = [];
@@ -81,8 +81,8 @@ class Game {
     this.particles = new Particles(this.scene);
     this.grass = new Grass(this.scene, this.world, hi, CHUNK);
     this.dust = new Dust(this.scene, hi ? 350 : 160);
-    this.strikes = []; this.wells = []; this.missiles = []; this.loot = [];
-    this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
+    this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.warpT = 0;
+    this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), mine: new THREE.CylinderGeometry(0.55, 0.65, 0.22, 16), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
     this.sfx = new Sfx();
     this.ui = new UI(this, isTouch);
     this.player = new Player(this);
@@ -100,6 +100,7 @@ class Game {
     this.addBeacon();
     this.player.respawn();
     this.save.abil = this.save.abil || {};
+    this.save.hidden = this.save.hidden || {};
     this.ui.renderAbilities();
     addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
@@ -258,25 +259,27 @@ class Game {
     if (!A || this.save.abil[key] || this.save.coins < A.cost) return;
     this.save.coins -= A.cost;
     this.save.abil[key] = true;
+    const full = key !== 'parry' && this.ui.barCount() >= this.ui.maxBar();
+    if (full) this.save.hidden[key] = true; else delete this.save.hidden[key];
     this.persist();
     this.sfx.buy();
     this.ui.renderShop();
     this.ui.renderAbilities();
-    this.ui.toast(A.icon + ' ' + A.name + ' unlocked! Use its button.');
+    this.ui.toast(A.icon + ' ' + A.name + (full ? ' unlocked! Your button bar is full: swap it on in the shop' + (isTouch ? '' : ' (key works anyway)') : ' unlocked! Use its button.'));
   }
   useAbility(key) {
     if (!this.running || this.shopOpen || !this.save.abil[key]) return;
     this.sfx.init();
     this.player.useAbility(key);
   }
-  enemyExplode(at, e) {
+  enemyExplode(at, e, R = 8) {
     const hit = (ent) => {
       if (ent.dead) return;
       const dx = ent.pos.x - at.x, dy = ent.pos.y + 0.7 - at.y, dz = ent.pos.z - at.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > 8) return;
+      if (d > R) return;
       const l = Math.hypot(dx, dz) || 1;
-      this.deliverHit(ent.id, { mode: 'bump', dmg: Math.round(10 + 22 * (1 - d / 8)), d: [dx / l, 0, dz / l], k: 0.8 + 1.4 * (1 - d / 8), attacker: e.id, aname: e.name });
+      this.deliverHit(ent.id, { mode: 'bump', dmg: Math.round(10 + 22 * (1 - d / R)), d: [dx / l, 0, dz / l], k: 0.8 + 1.4 * (1 - d / R), attacker: e.id, aname: e.name });
     };
     hit(this.player);
     for (const r of this.remotes.values()) if (r.kind === 'player') hit(r);
@@ -313,13 +316,102 @@ class Game {
     if (hitEnemies) { for (const e of this.enemies) hit(e); for (const r of this.remotes.values()) if (r.kind === 'enemy') hit(r); }
   }
   ownerOf(ent) { return { id: ent.id, name: ent === this.player ? this.name : ent.name, enemy: ent !== this.player }; }
-  addStrike(pos, delay, R, DMG, ownerEnt, fromEnemy) {
+  addStrike(pos, delay, R, DMG, ownerEnt, fromEnemy, fire = false) {
     const gy = this.world.groundAt(pos.x, pos.y + 3, pos.z);
     const y = gy !== null && pos.y - gy < 8 ? gy : pos.y;
-    const ring = new THREE.Mesh(this.fxGeo.ring, new THREE.MeshBasicMaterial({ color: fromEnemy ? 0xff3030 : 0x66ccff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+    const ring = new THREE.Mesh(this.fxGeo.ring, new THREE.MeshBasicMaterial({ color: fromEnemy ? 0xff3030 : fire ? 0xffa040 : 0x66ccff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.scale.setScalar(R); ring.position.set(pos.x, y + 0.2, pos.z);
     this.scene.add(ring);
-    this.strikes.push({ pos: new THREE.Vector3(pos.x, y + 1, pos.z), t: delay, R, DMG, owner: this.ownerOf(ownerEnt), fromEnemy, ring, bolt: null, bt: 0 });
+    this.strikes.push({ pos: new THREE.Vector3(pos.x, y + 1, pos.z), t: delay, R, DMG, owner: this.ownerOf(ownerEnt), fromEnemy, fire, ring, bolt: null, bt: 0 });
+  }
+  // ---------------- round 5: new enemy powers + abilities
+  meteorRain(ownerEnt, at, n, spread, fromEnemy) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, r = i === 0 ? 0 : Math.sqrt(Math.random()) * spread;
+      const q = new THREE.Vector3(at.x + Math.cos(a) * r, at.y, at.z + Math.sin(a) * r);
+      this.addStrike(q, 0.9 + i * 0.18, fromEnemy ? 4.5 : 5, fromEnemy ? 24 : 30, ownerEnt, fromEnemy, true);
+    }
+    this.sfx.near('zip', ownerEnt.pos);
+  }
+  landSlam(e) {
+    const big = !!e.T.boss;
+    this.blast(e.pos, this.ownerOf(e), big ? 10 : 5, big ? 30 : 16, true, false, big ? 1.6 : 1);
+    _v.copy(e.pos); _v.y += 0.4;
+    this.particles.burst(_v, e.T.color, big ? 40 : 18, big ? 16 : 9, 0.35);
+    this.particles.burst(_v, 0x6a5a4a, big ? 24 : 10, big ? 10 : 6, 0.4);
+    const dp = e.pos.distanceTo(this.player.pos);
+    if (dp < 40) this.shake((big ? 0.8 : 0.4) * (1 - dp / 40));
+    this.sfx.near('thunk', e.pos);
+  }
+  enemyHeal(e) {
+    let n = 0;
+    for (const o of this.enemies) {
+      if (o.dead || o === e || o.hp >= o.maxHp || o.pos.distanceTo(e.pos) > 25) continue;
+      o.hp = Math.min(o.maxHp, o.hp + (o.T.boss ? 40 : 20)); n++;
+      o.center(_v); this.particles.burst(_v, 0x4dff88, 14, 5, 0.25);
+    }
+    if (n) { e.center(_v); this.particles.burst(_v, 0x4dff88, 20, 8, 0.25); this.sfx.near('coin', e.pos); }
+    return n > 0;
+  }
+  fireBolt(p, f) {
+    const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0xff7a2a }));
+    m.scale.setScalar(0.45);
+    const start = this.camera.position.clone().addScaledVector(f, 1.2);
+    m.position.copy(start);
+    this.scene.add(m);
+    this.missiles.push({ pos: start, vel: f.clone().multiplyScalar(80), straight: true, t: 2.2, owner: this.ownerOf(p), mesh: m, trail: 0, R: 5, DMG: 35, col: 0xff7a2a });
+    this.sfx.shoot(); this.recoil = 1;
+  }
+  chainLightning(p) {
+    const all = [];
+    for (const e of this.enemies) if (!e.dead) all.push(e);
+    for (const r of this.remotes.values()) if (!r.dead) all.push(r);
+    const hitIds = new Set();
+    let from = p.eye(), cur = null, range = 35, n = 0;
+    for (let k = 0; k < 4; k++) {
+      let best = null, bd = range;
+      for (const e of all) {
+        if (hitIds.has(e.id)) continue;
+        const d = e.pos.distanceTo(cur ? cur.pos : p.pos);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (!best) break;
+      hitIds.add(best.id);
+      const to = best.pos.clone(); to.y += 0.8 * (best.scale || 1);
+      this.addZap(from, to);
+      const dx = best.pos.x - from.x, dz = best.pos.z - from.z, l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(best.id, { mode: 'bump', dmg: 25, k: 0.5, d: [dx / l, 0, dz / l], attacker: p.id, aname: this.name });
+      this.particles.burst(to, 0xbfe4ff, 14, 8, 0.2);
+      from = to; cur = best; range = 15; n++;
+    }
+    if (n) { this.sfx.near('hit', p.pos); this.sfx.near('zip', p.pos); this.ui.hitMarker(); }
+    return n;
+  }
+  addZap(a, b) {
+    const pts = [];
+    const segs = 10;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs, j = i === 0 || i === segs ? 0 : 1.1;
+      pts.push(new THREE.Vector3(a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j, a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j, a.z + (b.z - a.z) * t + (Math.random() - 0.5) * j));
+    }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.scene.add(line);
+    this.zaps.push({ line, t: 0.3 });
+  }
+  placeMine(p) {
+    const mine = this.mines.filter((m) => m.owner.id === p.id);
+    if (mine.length >= 3) this.removeMine(mine[0]);
+    const gy = this.world.groundAt(p.pos.x, p.pos.y + 1, p.pos.z);
+    const pos = new THREE.Vector3(p.pos.x, (gy !== null && p.pos.y - gy < 3 ? gy : p.pos.y) + 0.12, p.pos.z);
+    const mesh = new THREE.Mesh(this.fxGeo.mine, new THREE.MeshStandardMaterial({ color: 0x333333, emissive: 0xff2a00, emissiveIntensity: 0.6, metalness: 0.5, roughness: 0.4 }));
+    mesh.position.copy(pos);
+    this.scene.add(mesh);
+    this.mines.push({ pos, t: 25, arm: 0.6, owner: this.ownerOf(p), mesh });
+    this.sfx.thunk();
+  }
+  removeMine(m) {
+    this.scene.remove(m.mesh); m.mesh.material.dispose();
+    this.mines.splice(this.mines.indexOf(m), 1);
   }
   enemyLightning(e, tg) {
     const targets = [this.player, ...[...this.remotes.values()].filter((r) => r.kind === 'player')];
@@ -400,12 +492,13 @@ class Game {
       if (!s.bolt) {
         s.ring.material.opacity = 0.3 + 0.4 * Math.abs(Math.sin(this.time * 14));
         if (s.t <= 0) {
-          s.bolt = new THREE.Mesh(this.fxGeo.bolt, new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+          s.bolt = new THREE.Mesh(this.fxGeo.bolt, new THREE.MeshBasicMaterial({ color: s.fire ? 0xff7a2a : 0xcfe8ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
           s.bolt.position.set(s.pos.x, s.pos.y + 119, s.pos.z);
           this.scene.add(s.bolt);
           s.bt = 0.3;
           this.blast(s.pos, s.owner, s.R, s.DMG, true, !s.fromEnemy, 1.2);
-          this.particles.burst(s.pos, 0xbfe4ff, 30, 14, 0.25);
+          this.particles.burst(s.pos, s.fire ? 0xff8a3a : 0xbfe4ff, 30, 14, 0.25);
+          if (s.fire) this.particles.burst(s.pos, 0x3a2a2a, 14, 8, 0.4);
           const dp = s.pos.distanceTo(p.pos);
           if (dp < 60) this.shake(0.7 * (1 - dp / 60));
           this.hurtV = Math.max(this.hurtV, dp < 40 ? 0.15 : 0);
@@ -450,6 +543,30 @@ class Game {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.t -= dt;
+      if (m.straight) {
+        let boom2 = m.t <= 0;
+        if (!boom2) {
+          const len = m.vel.length() * dt;
+          const dir = _y.copy(m.vel).normalize();
+          const wh = this.world.raycast(m.pos, dir, len);
+          const whd = wh ? wh.dist : 1e9;
+          const eh = this.hitTestEntities(m.pos, dir, len, m.owner.id, false);
+          if (wh || eh) { m.pos.addScaledVector(dir, Math.min(whd, eh ? eh.dist : 1e9)); boom2 = true; }
+          else {
+            m.pos.addScaledVector(m.vel, dt); m.mesh.position.copy(m.pos);
+            m.trail -= dt;
+            if (m.trail <= 0) { m.trail = 0.03; this.particles.burst(m.pos, Math.random() < 0.5 ? 0xffb020 : 0xff4a1a, 2, 2, 0.15); }
+          }
+        }
+        if (boom2) {
+          this.blast(m.pos, m.owner, m.R, m.DMG, true, true, 1.2);
+          this.particles.burst(m.pos, 0xff7a2a, 26, 12, 0.3); this.particles.burst(m.pos, 0x3a2a2a, 10, 6, 0.4);
+          this.sfx.near('thunk', m.pos);
+          this.scene.remove(m.mesh); m.mesh.material.dispose();
+          this.missiles.splice(i, 1);
+        }
+        continue;
+      }
       const tg = this.getEntity(m.target);
       let boom = m.t <= 0 || !tg || tg.dead;
       if (!boom) {
@@ -472,6 +589,30 @@ class Game {
         this.sfx.near('thunk', m.pos);
         this.scene.remove(m.mesh); m.mesh.material.dispose();
         this.missiles.splice(i, 1);
+      }
+    }
+    for (let i = this.zaps.length - 1; i >= 0; i--) {
+      const z = this.zaps[i];
+      z.t -= dt; z.line.material.opacity = Math.max(0, z.t / 0.3);
+      if (z.t <= 0) { this.scene.remove(z.line); z.line.geometry.dispose(); z.line.material.dispose(); this.zaps.splice(i, 1); }
+    }
+    for (let i = this.mines.length - 1; i >= 0; i--) {
+      const m = this.mines[i];
+      m.t -= dt; m.arm -= dt;
+      m.mesh.material.emissiveIntensity = m.arm > 0 ? 0.2 : 0.4 + 0.8 * (Math.sin(this.time * 8) > 0 ? 1 : 0);
+      let trig = false;
+      if (m.arm <= 0) {
+        const near = (ent) => !ent.dead && ent.id !== m.owner.id && ent.pos.distanceTo(m.pos) < 3.2 + (ent.scale || 1) * 0.5;
+        trig = this.enemies.some(near) || [...this.remotes.values()].some(near);
+      }
+      if (trig || m.t <= 0) {
+        if (trig) {
+          _v.copy(m.pos); _v.y += 0.6;
+          this.blast(_v, m.owner, 6, 45, true, true, 1.4);
+          this.particles.burst(_v, 0xffb020, 30, 14, 0.4); this.particles.burst(_v, 0x3a3a3a, 14, 7, 0.45);
+          this.sfx.near('thunk', m.pos); this.sfx.near('hurt', m.pos);
+        }
+        this.removeMine(m);
       }
     }
     for (let i = this.loot.length - 1; i >= 0; i--) {
@@ -603,7 +744,7 @@ class Game {
   findTarget(e, maxD) {
     let best = null, bd = maxD;
     const p = this.player;
-    if (!p.dead && !inSafeZone(p.pos)) { const d = p.pos.distanceTo(e.pos); if (d < bd) { bd = d; best = p; } }
+    if (!p.dead && !inSafeZone(p.pos) && !(p.cloakT > 0)) { const d = p.pos.distanceTo(e.pos); if (d < bd) { bd = d; best = p; } }
     for (const r of this.remotes.values()) {
       if (r.kind !== 'player' || r.dead || inSafeZone(r.pos)) continue;
       const d = r.pos.distanceTo(e.pos);
@@ -612,7 +753,12 @@ class Game {
     return best;
   }
   deliverHit(id, hit) {
-    if (hit.attacker === this.player.id && this.player.parryT > 0 && !hit.parry) hit = { ...hit, dmg: 0 };
+    const me = this.player;
+    if (hit.attacker === me.id && id !== me.id && hit.dmg) {
+      if (me.rageT > 0) hit = { ...hit, dmg: Math.round(hit.dmg * 2) };
+      if (me.parryT > 0 && !hit.parry) hit = { ...hit, dmg: 0 };
+      else if (me.vampT > 0 && !me.dead) me.hp = Math.min(this.stats.health, me.hp + hit.dmg * 0.5);
+    }
     if (id === this.player.id) { this.player.applyHit(hit); return; }
     for (const e of this.enemies) if (e.id === id) { e.applyHit(hit); return; }
     const r = this.remotes.get(id);
@@ -774,7 +920,10 @@ class Game {
     if (this.running) {
       this.input.update(dt);
       p.update(dt, this.input);
-      for (const e of this.enemies) e.update(dt);
+      if (this.warpT > 0) this.warpT -= dt;
+      const edt = this.warpT > 0 ? dt * 0.3 : dt;
+      for (const e of this.enemies) e.update(edt);
+      if (this.spawnQueue.length) { const q = this.spawnQueue.splice(0); for (const fn of q) fn(); }
       if (this.enemies.some((e) => e.dead)) this.enemies = this.enemies.filter((e) => !e.dead);
       const now = performance.now();
       for (const [id, r] of this.remotes) {
@@ -902,6 +1051,7 @@ class Game {
         ui.bossArrow(ff - Math.atan2(dx, dz), ad);
       } else ui.bossArrow(null);
       ui.parry(p.parryT > 0);
+      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -1212,6 +1362,82 @@ if (location.search.includes("autotest")) {
       r4.grassBlades = [...game.grass.built.values()].reduce((a, m) => a + m.count, 0);
       p.applyHit = oa; p.hp = 100;
       log.round4 = r4;
+      // ---- round 5: anti-stuck, new enemy types, inferno boss, new abilities
+      const r5 = {};
+      const clearAll = () => { game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = []; };
+      clearAll(); reset();
+      // (a) a bot that is wedged (can't walk) and never gets to attack must still reach you
+      {
+        const o = clearOff(30); const e = new Enemy(game, p.pos.clone().add(o), 'brute'); game.enemies.push(e);
+        e.move = function () { this.moving = false; };
+        const d0 = e.pos.distanceTo(p.pos);
+        for (let i = 0; i < 10; i++) { e.cool = 99; sim(1); p.hp = 9999; p.pos.copy(st6); p.vel.set(0, 0, 0); }
+        r5.wedged = { d0: Math.round(d0), d1: Math.round(e.pos.distanceTo(p.pos)), unsticks: e.stuckCount || 0 };
+        clearAll();
+      }
+      // (b) new enemy types in a fight
+      {
+        reset();
+        const hitsOnMe = {}; let slowSeen = 0, landSlams = 0, heals = 0;
+        const oa = p.applyHit.bind(p);
+        p.applyHit = (h) => { hitsOnMe[h.aname + ':' + h.mode] = (hitsOnMe[h.aname + ':' + h.mode] || 0) + 1; return oa(h); };
+        const ols = game.landSlam.bind(game); game.landSlam = (e) => { landSlams++; return ols(e); };
+        const oh = game.enemyHeal.bind(game); game.enemyHeal = (e) => { const r = oh(e); if (r) heals++; return r; };
+        const made = ['frost', 'leaper', 'splitter', 'medic', 'kamikaze'].map((t, i) => { const q = c6.pointAt(i * 1.2, 0.45); q.y += 2; const e = new Enemy(game, q, t); game.enemies.push(e); return e; });
+        for (let i = 0; i < 16; i++) {
+          sim(1); if (p.dead) p.respawn(); p.hp = 9999; if (p.slowT > 0) slowSeen++;
+          if (i % 3 === 0) { p.pos.copy(st6); p.vel.set(0, 0, 0); }
+          for (const e of game.enemies) if (e.type !== 'medic' && !e.dead && e.hp === e.maxHp) e.hp = e.maxHp - 30;
+        }
+        const sp = made.find((e) => e.type === 'splitter');
+        if (sp && !sp.dead) { sp.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; sp.hp = 1; sp.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' }); sim(0.1); }
+        const minis = game.enemies.filter((e) => e.type === 'mini' && !e.dead).length;
+        r5.types = { hitsOnMe, slowSeen, landSlams, heals, minis, splitterDead: sp.dead, kamikazeGone: made[4].dead, stuckFixes: made.map((e) => e.type + ':' + (e.stuckCount || 0)) };
+        p.applyHit = oa; game.landSlam = ols; game.enemyHeal = oh;
+        clearAll();
+      }
+      // (c) INFERNO LORD
+      {
+        reset();
+        const q = c6.pointAt(0.5 + Math.PI, 0.4); q.y += 2;
+        const b = new Enemy(game, q, 'inferno'); b.specialCool = 0.5; game.enemies.push(b);
+        let fireStrikes = 0; const oas = game.addStrike.bind(game);
+        game.addStrike = (...a) => { if (a[6]) fireStrikes++; return oas(...a); };
+        let minD = 1e9;
+        for (let i = 0; i < 14; i++) { sim(1); minD = Math.min(minD, b.pos.distanceTo(p.pos)); if (p.dead) p.respawn(); p.hp = 9999; if (i % 3 === 0) { p.pos.copy(st6); p.vel.set(0, 0, 0); } }
+        game.addStrike = oas;
+        b.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; b.hp = 1;
+        const c0 = game.save.coins;
+        b.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' });
+        const reward = game.save.coins - c0;
+        clearAll();
+        if (game.loot.length) { p.pos.copy(game.loot[0].pos); p.pos.y -= 1.2; sim(0.2); }
+        r5.inferno = { fireStrikes, closest: Math.round(minD), reward, unlocked: !!game.save.abil.meteor };
+      }
+      // (d) new abilities
+      {
+        for (const k of ['fireball', 'frost', 'cloak', 'chain', 'tornado', 'mine', 'timewarp', 'jetpack', 'vampire', 'rage']) game.save.abil[k] = true;
+        game.ui.renderAbilities();
+        const A = {};
+        const mk2 = (off) => { const e = new Enemy(game, p.pos.clone().add(off), 'brute'); e.think = 999; e.wdT = 999; game.enemies.push(e); return e; };
+        reset(); let e = mk2(clearOff(20)); sim(0.3); let t = e.pos.clone(); t.y += 1.2; aim(t); p.useAbility('fireball'); sim(1); A.fireball = 160 - e.hp; clearAll();
+        reset(); e = mk2(clearOff(8)); sim(0.3); p.useAbility('frost'); sim(0.1); A.frost = { dmg: 160 - e.hp, frozen: +e.frozenT.toFixed(1) }; clearAll();
+        reset(); e = new Enemy(game, p.pos.clone().add(clearOff(15)), 'grappler'); game.enemies.push(e); p.useAbility('cloak'); sim(0.1); A.cloak = { seen: !!game.findTarget(e, 150) }; sim(5.2); A.cloak.seenAfter = !!game.findTarget(e, 150); clearAll();
+        reset(); const b12 = clearOff(12); const es = [mk2(b12), mk2(b12.clone().add(new THREE.Vector3(3, 0, 3))), mk2(b12.clone().add(new THREE.Vector3(-3, 0, 3)))]; sim(0.3); p.useAbility('chain'); sim(0.1); A.chain = es.map((x) => 160 - x.hp); A.zaps = game.zaps.length; clearAll();
+        reset(); e = mk2(clearOff(6)); sim(0.3); p.useAbility('tornado'); sim(0.05); A.tornadoVy = Math.round(e.vel.y); clearAll();
+        reset(); p.useAbility('mine'); sim(1); const mines = game.mines.length; e = mk2(new THREE.Vector3(1.5, 0.3, 0)); sim(0.2); A.mine = { placed: mines, dmg: 160 - e.hp, left: game.mines.length }; clearAll();
+        reset(); p.useAbility('timewarp'); A.timewarp = +game.warpT.toFixed(1); sim(5.2); A.timewarpAfter = +Math.max(0, game.warpT).toFixed(1);
+        reset(); const j0 = p.pos.clone(); p.pitch = 0.3; p.useAbility('jetpack'); sim(2.5); A.jetpack = { moved: Math.round(p.pos.distanceTo(j0)), rose: Math.round(p.pos.y - j0.y) };
+        reset(); e = mk2(clearOff(10)); p.hp = 50; p.lastHurt = game.time; p.useAbility('vampire'); game.deliverHit(e.id, { mode: 'latch', dmg: 20, attacker: p.id, aname: 'me' }); A.vampire = Math.round(p.hp - 50); clearAll();
+        reset(); e = mk2(clearOff(10)); p.useAbility('rage'); game.deliverHit(e.id, { mode: 'latch', dmg: 20, attacker: p.id, aname: 'me' }); A.rage = 160 - e.hp; clearAll();
+        reset(); game.save.abil.meteor = true; game.ui.renderAbilities(); e = mk2(clearOff(25)); sim(0.3); t = e.pos.clone(); t.y += 1.2; aim(t); p.useAbility('meteor'); sim(2.5); A.meteor = 160 - e.hp; clearAll();
+        A.barButtons = document.querySelectorAll('#abilities .ab').length;
+        A.rareButtons = document.querySelectorAll('#rareAbilities .ab').length;
+        reset(); p.cd = {}; p.rageT = 0; dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' })); A.keyK = p.rageT > 0;
+        r5.abilities = A;
+      }
+      p.hp = 100;
+      log.round5 = r5;
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);
