@@ -15,7 +15,7 @@ import { UI } from './ui.js';
 import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
-import { makeGun, makeHookHead, Rope } from './models.js';
+import { makeGun, makeHookHead, Rope, makeCharacter, makeTextSprite } from './models.js';
 import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE } from './upgrades.js';
 import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
 
@@ -42,7 +42,7 @@ function genCode() {
 class Game {
   constructor() {
     this.save = loadSave();
-    this.stats = computeStats(this.save.up);
+    this.stats = computeStats(this.save.up, this.save.passive);
     this.quality = this.save.quality;
     const hi = this.quality === 'high';
     this.name = 'Player';
@@ -81,7 +81,7 @@ class Game {
     this.particles = new Particles(this.scene);
     this.grass = new Grass(this.scene, this.world, hi, CHUNK);
     this.dust = new Dust(this.scene, hi ? 350 : 160);
-    this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.warpT = 0;
+    this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.dots = []; this.bags = []; this.decoys = []; this.warpT = 0;
     this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), mine: new THREE.CylinderGeometry(0.55, 0.65, 0.22, 16), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
     this.sfx = new Sfx();
     this.ui = new UI(this, isTouch);
@@ -254,7 +254,7 @@ class Game {
     this.save.coins -= cost;
     this.save.up[key] = lv + 1;
     const oldMax = this.stats.health;
-    this.stats = computeStats(this.save.up);
+    this.stats = computeStats(this.save.up, this.save.passive);
     if (key === 'health') this.player.hp += this.stats.health - oldMax;
     this.persist();
     this.sfx.buy();
@@ -265,6 +265,7 @@ class Game {
     if (!P || this.save.passive[key] || this.save.coins < P.cost) return;
     this.save.coins -= P.cost;
     this.save.passive[key] = true;
+    this.stats = computeStats(this.save.up, this.save.passive);
     this.persist();
     this.sfx.buy(); this.sfx.kill();
     this.ui.renderShop();
@@ -369,13 +370,15 @@ class Game {
     if (n) { e.center(_v); this.particles.burst(_v, 0x4dff88, 20, 8, 0.25); this.sfx.near('coin', e.pos); }
     return n > 0;
   }
-  fireBolt(p, f) {
-    const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0xff7a2a }));
-    m.scale.setScalar(0.45);
+  fireBolt(p, f, o = {}) {
+    const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: o.color || 0xff7a2a }));
+    m.scale.setScalar(o.size || 0.45);
+    if (o.size) m.scale.set(o.size * 0.5, o.size * 0.5, o.size * 4);
     const start = this.camera.position.clone().addScaledVector(f, 1.2);
     m.position.copy(start);
     this.scene.add(m);
-    this.missiles.push({ pos: start, vel: f.clone().multiplyScalar(80), straight: true, t: 2.2, owner: this.ownerOf(p), mesh: m, trail: 0, R: 5, DMG: 35, col: 0xff7a2a });
+    if (o.size) m.lookAt(start.clone().add(f));
+    this.missiles.push({ pos: start, vel: f.clone().multiplyScalar(o.speed || 80), straight: true, t: 2.2, owner: this.ownerOf(p), mesh: m, trail: 0, R: o.R || 5, DMG: o.DMG || 35, col: o.color || 0xff7a2a, spear: !!o.size });
     this.sfx.shoot(); this.recoil = 1;
   }
   chainLightning(p) {
@@ -475,6 +478,52 @@ class Game {
     }
     if (p.laserT <= 0) L.visible = false;
   }
+  enemyFrostNova(e, R) {
+    const hit = (ent) => {
+      if (ent.dead || ent.pos.distanceTo(e.pos) > R) return;
+      const dx = ent.pos.x - e.pos.x, dz = ent.pos.z - e.pos.z, l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(ent.id, { mode: 'bump', dmg: 18, k: 0.6, d: [dx / l, 0, dz / l], freeze: 3, attacker: e.id, aname: e.name });
+    };
+    hit(this.player);
+    for (const r of this.remotes.values()) if (r.kind === 'player') hit(r);
+    e.center(_v);
+    for (let k = 0; k < 3; k++) this.particles.burst(_v, k ? 0xbfefff : 0xffffff, 40, 10 + k * 7, 0.45);
+    if (e.pos.distanceTo(this.player.pos) < 50) this.shake(0.4);
+    this.sfx.near('parry', e.pos);
+  }
+  addDot(id, owner, ticks, dmg) { this.dots.push({ id, owner, n: ticks, dmg, t: 0.5 }); }
+  dropCoinBag(pos, n, id, remote) {
+    const g = new THREE.Group();
+    const sack = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0xc9a050, roughness: 0.8 }));
+    sack.scale.set(0.7, 0.6, 0.7); sack.position.y = 0.55; g.add(sack);
+    const knot = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0x8a6a30, roughness: 0.8 }));
+    knot.scale.setScalar(0.22); knot.position.y = 1.15; g.add(knot);
+    const coin = new THREE.Mesh(this.fxGeo.mine, new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xaa7700, emissiveIntensity: 0.8, metalness: 0.7, roughness: 0.3 }));
+    coin.scale.set(0.8, 0.6, 0.8); coin.rotation.x = Math.PI / 2; coin.position.set(0, 0.65, 0.62); g.add(coin);
+    const label = makeTextSprite(`💰 ${n}`, { bg: 'rgba(40,30,0,0.75)', color: '#ffd23a', size: 1 });
+    label.position.y = 2.2; g.add(label);
+    const beam = new THREE.Mesh(this.fxGeo.beam, new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    beam.scale.set(0.5, 1, 0.5); beam.position.y = 45; g.add(beam);
+    g.position.copy(pos);
+    this.scene.add(g);
+    const bag = { id: id || this.sid + '-bag-' + Math.floor(Math.random() * 1e9), pos: pos.clone(), n, g, t: 180 };
+    this.bags.push(bag);
+    if (!remote && this.net) this.net.send({ t: 'bag', id: bag.id, x: pos.x, y: pos.y, z: pos.z, n });
+    return bag;
+  }
+  removeBag(bag) {
+    this.scene.remove(bag.g);
+    bag.g.traverse((o) => { if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    this.bags.splice(this.bags.indexOf(bag), 1);
+  }
+  addDecoy(p) {
+    const m = makeCharacter(0x2f7bff, { name: this.name, tagColor: '#cfe2ff' });
+    const pos = p.pos.clone();
+    m.group.position.copy(pos); m.group.rotation.y = p.yaw;
+    this.scene.add(m.group);
+    this.decoys.push({ id: 'decoy' + Math.random(), kind: 'player', name: this.name, pos, vel: new THREE.Vector3(), ground: p.ground, scale: 1, dead: false, t: 7, model: m });
+    _v.copy(pos); _v.y += 0.8; this.particles.burst(_v, 0x6fb0ff, 20, 6, 0.25);
+  }
   removeMine(m) {
     this.scene.remove(m.mesh); m.mesh.material.dispose();
     this.mines.splice(this.mines.indexOf(m), 1);
@@ -492,7 +541,7 @@ class Game {
     }
     this.sfx.near('zip', e.pos);
   }
-  hiveSummon(e) {
+  hiveSummon(e, types = ['zipper', 'bomber']) {
     e.minions = (e.minions || []).filter((m) => !m.dead);
     if (e.minions.length >= 5) return;
     for (let i = 0; i < 2; i++) {
@@ -500,7 +549,7 @@ class Game {
       const x = e.pos.x + Math.cos(a) * 6, z = e.pos.z + Math.sin(a) * 6;
       const gy = this.world.groundAt(x, e.pos.y + 4, z);
       if (gy === null) continue;
-      const m = new Enemy(this, new THREE.Vector3(x, gy + 0.5, z), Math.random() < 0.5 ? 'zipper' : 'bomber');
+      const m = new Enemy(this, new THREE.Vector3(x, gy + 0.5, z), types[Math.floor(Math.random() * types.length)]);
       this.enemies.push(m); e.minions.push(m);
       this.particles.burst(m.pos, 0xffd23a, 14, 6, 0.2);
     }
@@ -632,12 +681,13 @@ class Game {
           else {
             m.pos.addScaledVector(m.vel, dt); m.mesh.position.copy(m.pos);
             m.trail -= dt;
-            if (m.trail <= 0) { m.trail = 0.03; this.particles.burst(m.pos, Math.random() < 0.5 ? 0xffb020 : 0xff4a1a, 2, 2, 0.15); }
+            if (m.trail <= 0) { m.trail = 0.03; this.particles.burst(m.pos, m.spear ? 0xffffff : Math.random() < 0.5 ? 0xffb020 : 0xff4a1a, m.spear ? 1 : 2, 2, 0.15); }
           }
         }
         if (boom2) {
-          this.blast(m.pos, m.owner, m.R, m.DMG, true, true, 1.2);
-          this.particles.burst(m.pos, 0xff7a2a, 26, 12, 0.3); this.particles.burst(m.pos, 0x3a2a2a, 10, 6, 0.4);
+          this.blast(m.pos, m.owner, m.R, m.DMG, true, true, m.spear ? 0.7 : 1.2);
+          if (m.spear) this.particles.burst(m.pos, 0xdfe6ee, 18, 8, 0.2);
+          else { this.particles.burst(m.pos, 0xff7a2a, 26, 12, 0.3); this.particles.burst(m.pos, 0x3a2a2a, 10, 6, 0.4); }
           this.sfx.near('thunk', m.pos);
           this.scene.remove(m.mesh); m.mesh.material.dispose();
           this.missiles.splice(i, 1);
@@ -666,6 +716,53 @@ class Game {
         this.sfx.near('thunk', m.pos);
         this.scene.remove(m.mesh); m.mesh.material.dispose();
         this.missiles.splice(i, 1);
+      }
+    }
+    for (let i = this.dots.length - 1; i >= 0; i--) {
+      const d = this.dots[i];
+      d.t -= dt;
+      if (d.t > 0) continue;
+      d.t = 0.5; d.n--;
+      const ent = this.getEntity(d.id);
+      if (!ent || ent.dead || d.n < 0) { this.dots.splice(i, 1); continue; }
+      this.deliverHit(d.id, { mode: 'burn', dmg: d.dmg, attacker: d.owner.id, aname: d.owner.name });
+      _v.copy(ent.pos); _v.y += 0.8 * (ent.scale || 1); this.particles.burst(_v, Math.random() < 0.5 ? 0xff7a2a : 0xffd23a, 6, 4, 0.25);
+    }
+    for (let i = this.bags.length - 1; i >= 0; i--) {
+      const b = this.bags[i];
+      b.t -= dt;
+      b.g.children[0].rotation.y += dt;
+      b.g.position.y = b.pos.y + Math.abs(Math.sin(this.time * 3)) * 0.25;
+      const reach = p.has('coinmagnet') ? 12 : 2.6;
+      if (!p.dead && p.pos.distanceTo(b.pos) < reach) {
+        this.save.coins += b.n; this.persist();
+        this.ui.toast(`💰 Picked up ${b.n} coins!`); this.sfx.buy(); this.sfx.coin();
+        _v.copy(b.pos); _v.y += 0.8; this.particles.burst(_v, 0xffd23a, 30, 8, 0.3);
+        if (this.net) this.net.send({ t: 'bagTake', id: b.id });
+        this.removeBag(b);
+      } else if (b.t <= 0) this.removeBag(b);
+    }
+    for (let i = this.decoys.length - 1; i >= 0; i--) {
+      const d = this.decoys[i];
+      d.t -= dt;
+      d.model.update(dt, this.camera, false, 0);
+      if (d.t <= 0) {
+        d.dead = true;
+        _v.copy(d.pos); _v.y += 0.8; this.particles.burst(_v, 0x6fb0ff, 24, 7, 0.25);
+        this.scene.remove(d.model.group); d.model.dispose();
+        this.decoys.splice(i, 1);
+      }
+    }
+    if (p.blizT > 0 && !p.dead) {
+      p.blizT -= dt; p.blizTick -= dt;
+      for (let k = 0; k < 6; k++) { const a = Math.random() * TAU, r = Math.random() * 22; _v.set(p.pos.x + Math.cos(a) * r, p.pos.y + Math.random() * 8, p.pos.z + Math.sin(a) * r); this.particles.burst(_v, 0xffffff, 1, 3, 0.4); }
+      if (p.blizTick <= 0) {
+        p.blizTick = 0.5;
+        const hit = (ent) => {
+          if (ent.dead || ent === p || ent.pos.distanceTo(p.pos) > 22) return;
+          this.deliverHit(ent.id, { mode: 'burn', dmg: 8, freeze: 1, attacker: p.id, aname: this.name });
+        };
+        this.enemies.forEach(hit); this.remotes.forEach(hit);
       }
     }
     for (let i = this.zaps.length - 1; i >= 0; i--) {
@@ -799,6 +896,7 @@ class Game {
   getEntity(id) {
     if (id === this.player.id) return this.player;
     for (const e of this.enemies) if (e.id === id) return e;
+    for (const d of this.decoys) if (d.id === id) return d;
     return this.remotes.get(id) || null;
   }
   hitTestEntities(o, dir, len, exclude, playersOnly) {
@@ -828,12 +926,15 @@ class Game {
       const d = r.pos.distanceTo(e.pos);
       if (d < bd) { bd = d; best = r; }
     }
+    // decoys are more tempting than the real thing
+    for (const dc of this.decoys) { const d = dc.pos.distanceTo(e.pos) * 0.6; if (d < bd) { bd = d; best = dc; } }
     return best;
   }
   deliverHit(id, hit) {
     const me = this.player;
     if (hit.attacker === me.id && id !== me.id && hit.dmg) {
       if (me.rageT > 0) hit = { ...hit, dmg: Math.round(hit.dmg * 2) };
+      if (me.has('adrenaline') && me.hp < this.stats.health * 0.3) hit = { ...hit, dmg: Math.round(hit.dmg * 1.5) };
       if (me.parryT > 0 && !hit.parry) hit = { ...hit, dmg: 0 };
       else {
         if (me.vampT > 0 && !me.dead) me.hp = Math.min(this.stats.health, me.hp + hit.dmg * 0.5);
@@ -848,6 +949,18 @@ class Game {
   onLocalDeath(p, msg) {
     this.sfx.death();
     this.ui.showDeath(msg);
+    // you drop ALL your coins where you died (or where you fell from)
+    const n = this.save.coins;
+    if (n > 0) {
+      let at = null;
+      if (p.pos.y > KILL_Y + 20) { const gy = this.world.groundAt(p.pos.x, p.pos.y + 2, p.pos.z); if (gy !== null && p.pos.y - gy < 30) at = new THREE.Vector3(p.pos.x, gy, p.pos.z); }
+      if (!at && p.lastGround) at = p.lastGround.clone();
+      if (!at) at = p.pos.clone();
+      if (inSafeZone(at)) { /* died on the spawn island: keep it there */ }
+      this.save.coins = 0; this.persist();
+      this.dropCoinBag(at, n);
+      this.ui.deathCoins(n);
+    } else this.ui.deathCoins(0);
     _v.copy(p.pos); _v.y += 0.7;
     this.particles.burst(_v, 0x2f7bff, 24, 9, 0.35);
     const la = p.lastAttacker;
@@ -869,7 +982,9 @@ class Game {
     const mine = m.killer === this.player.id;
     this.ui.feed(`${m.kname} ⚔ ${m.vname}`, mine ? 'me' : m.vkind === 'player' ? 'pk' : '');
     if (mine) {
-      const reward = m.reward || (m.vkind === 'player' ? 50 : 30);
+      let reward = m.reward || (m.vkind === 'player' ? 50 : 30);
+      if (this.player.has('bounty')) reward += m.drop ? 150 : 25;
+      if (this.player.has('bloodlust') && !this.player.dead) this.player.hp = Math.min(this.stats.health, this.player.hp + 30);
       this.addCoins(reward);
       this.sfx.kill();
       this.ui.toast(`+${reward} 🪙  ${m.vname} eliminated!`);
@@ -968,6 +1083,8 @@ class Game {
         break;
       }
       case 'kill': this.handleKill(m); break;
+      case 'bag': if (!this.bags.some((b) => b.id === m.id) && isFinite(m.x) && m.n > 0) this.dropCoinBag(new THREE.Vector3(m.x, m.y, m.z), Math.min(1e7, Math.floor(m.n)), String(m.id), true); break;
+      case 'bagTake': { const b = this.bags.find((x) => x.id === m.id); if (b) this.removeBag(b); break; }
       case 'leave': this.removeOwner(m.id); break;
     }
   }
@@ -1607,6 +1724,62 @@ if (location.search.includes("autotest")) {
         pa.passiveShopsLoaded = (() => { let n = 0, t = 0; for (const b of game.world.built.values()) for (const I of game.world.getData(b.cx, b.cz).islands) if (I.shop) { t++; if (I.shop.passive) n++; } return n + '/' + t; })();
         game.save.passive = {}; p.hp = 100;
         log.passives = pa;
+      }
+      {
+        const r7 = {};
+        const clr = () => { game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = []; };
+        const mk4 = (off, t = 'brute') => { const e = new Enemy(game, p.pos.clone().add(off), t); e.think = 999; e.wdT = 999; game.enemies.push(e); return e; };
+        // ---- death drops all coins, picking the bag up gives them back
+        reset(); game.save.coins = 777; const deathAt = p.pos.clone(); p.die('test');
+        r7.death = { coinsAfterDeath: game.save.coins, bags: game.bags.length, bagN: game.bags[0] && game.bags[0].n, bagNearDeath: game.bags[0] ? Math.round(game.bags[0].pos.distanceTo(deathAt)) : -1, msg: (document.getElementById('deathCoins') || {}).textContent };
+        p.respawn(); reset(); if (game.bags[0]) { p.pos.copy(game.bags[0].pos); sim(0.2); } r7.death.coinsBack = game.save.coins; r7.death.bagsLeft = game.bags.length;
+        // fall death: bag goes to where you fell from
+        reset(); sim(0.5); game.save.coins = 300; const lg = p.lastGround.clone(); p.pos.y = -400; p.vel.set(0, -60, 0); sim(0.1);
+        r7.fallBag = { dead: p.dead, nearLedge: game.bags.length ? Math.round(game.bags[0].pos.distanceTo(lg)) : -1 };
+        p.respawn(); reset(); if (game.bags.length) { p.pos.copy(game.bags[0].pos); sim(0.2); }
+        // ---- bosses
+        for (const bk of ['frostqueen', 'reaper']) {
+          reset(); const hitsOnMe = {};
+          const oa = p.applyHit.bind(p); p.applyHit = (h) => { hitsOnMe[h.mode + (h.freeze ? '+freeze' : '')] = (hitsOnMe[h.mode + (h.freeze ? '+freeze' : '')] || 0) + 1; return oa(h); };
+          const q = c6.pointAt(0.5 + Math.PI, 0.4); q.y += 2;
+          const b = new Enemy(game, q, bk); b.specialCool = 0.5; game.enemies.push(b);
+          let closest = 1e9;
+          for (let i = 0; i < 16; i++) { sim(1); closest = Math.min(closest, b.pos.distanceTo(p.pos)); if (p.dead) p.respawn(); p.hp = 9999; if (i % 3 === 0) { p.pos.copy(st6); p.vel.set(0, 0, 0); } }
+          p.applyHit = oa;
+          const minions = game.enemies.filter((e) => e !== b && !e.dead).map((e) => e.type);
+          b.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; b.hp = 1; const c0 = game.save.coins;
+          b.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' });
+          const reward = game.save.coins - c0; clr();
+          if (game.loot.length) { p.pos.copy(game.loot[0].pos); p.pos.y -= 1.2; sim(0.2); }
+          r7[bk] = { hitsOnMe, closest: Math.round(closest), minions, reward, unlocked: !!game.save.abil[b.T.drop] };
+        }
+        // ---- new abilities
+        const A = {};
+        for (const k of ['spear', 'decoy', 'anchor', 'overcharge', 'blink']) game.save.abil[k] = true;
+        reset(); let e = mk4(clearOff(30)); sim(0.2); let t = e.pos.clone(); t.y += 1.2; aim(t); p.useAbility('spear'); sim(0.6); A.spear = 160 - e.hp; clr();
+        reset(); e = new Enemy(game, p.pos.clone().add(clearOff(25)), 'grappler'); game.enemies.push(e); p.useAbility('decoy'); sim(0.1); const ft = game.findTarget(e, 150); A.decoy = { targetIsDecoy: !!ft && ft.id.startsWith('decoy') }; sim(7.2); A.decoy.gone = game.decoys.length === 0; clr();
+        reset(); const ea = mk4(clearOff(6)); sim(0.2); p.useAbility('anchor'); sim(2); A.anchor = { dmg: 160 - ea.hp, slamming: p.slamming }; clr();
+        reset(); p.cd = { spear: 5, blink: 4, dash: 3 }; p.useAbility('overcharge'); A.overcharge = { spear: p.cd.spear, blink: p.cd.blink, own: Math.round(p.cd.overcharge) };
+        reset(); p.pitch = 0; const b0 = p.pos.clone(); for (let a = 0; a < 6.3; a += 0.5) { p.yaw = a; const o = p.eye(); const f = p.forward(); if (!game.world.raycast(o, f, 22)) break; } const okB = p.useAbility('blink'); A.blink = { ok: okB, moved: Math.round(p.pos.distanceTo(b0)) };
+        game.save.abil.blizzard = true; game.save.abil.shadowstep = true;
+        reset(); const bz = [mk4(clearOff(10)), mk4(clearOff(18))]; sim(0.2); p.useAbility('blizzard'); sim(4.2); A.blizzard = bz.map((x) => ({ dmg: 160 - x.hp }));  clr();
+        reset(); e = mk4(clearOff(30)); sim(0.2); t = e.pos.clone(); t.y += 1.2; aim(t); p.useAbility('shadowstep'); A.shadowstep = { dmg: 160 - e.hp, distAfter: Math.round(p.pos.distanceTo(e.pos)) }; clr();
+        r7.abilities = A;
+        // ---- new passives
+        const P = {};
+        game.save.passive = {};
+        const s0 = { ...game.stats };
+        for (const k of ['longarm', 'turbopull', 'wallrunner']) game.save.passive[k] = true;
+        game.stats = computeStats(game.save.up, game.save.passive);
+        P.stats = { range: Math.round(game.stats.range / s0.range * 100) + '%', pull: Math.round(game.stats.pull / s0.pull * 100) + '%', climb: game.stats.climbReach - s0.climbReach };
+        reset(); game.save.passive.laststand = true; p.hp = 20; p.applyHit({ mode: 'burn', dmg: 999, attacker: 'x', aname: 'X' }); P.laststand = { hp: p.hp, dead: p.dead, shield: p.shieldT > 0 }; p.applyHit({ mode: 'burn', dmg: 999, attacker: 'x', aname: 'X' }); p.shieldT = 0; p.applyHit({ mode: 'burn', dmg: 999, attacker: 'x', aname: 'X' }); P.laststand.secondHitKills = p.dead; p.respawn();
+        reset(); game.save.passive.burning = true; e = mk4(clearOff(15)); sim(0.2); t = e.pos.clone(); t.y += 1.2; aim(t); p.shoot(); sim(0.3); const hb = 160 - e.hp; sim(4.5); P.burning = { hookDmg: hb, burnDmg: 160 - e.hp - hb }; p.cancel(); clr();
+        reset(); game.save.passive.bloodlust = true; game.save.passive.bounty = true; p.hp = 40; const cb = game.save.coins; game.handleKill({ killer: p.id, kname: 'me', vname: 'Dummy', vkind: 'enemy', reward: 30 }); P.bloodlust = Math.round(p.hp - 40); P.bounty = game.save.coins - cb;
+        reset(); game.save.passive.adrenaline = true; p.hp = 20; e = mk4(clearOff(10)); game.deliverHit(e.id, { mode: 'latch', dmg: 20, attacker: p.id, aname: 'me' }); P.adrenalineDmg = 160 - e.hp; clr();
+        reset(); game.save.passive.aircontrol = true; game.save.passive.coinmagnet = true; P.shopRows = (() => { game.shopMode = 'passive'; game.ui.renderShop(); const n = document.querySelectorAll('#shopList .upg.passive').length; game.shopMode = 'normal'; return n; })();
+        game.save.passive = {}; game.stats = computeStats(game.save.up, {}); p.hp = 100;
+        r7.passives = P;
+        log.round7 = r7;
         // music: render 6 s offline and measure it
         try {
           const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;

@@ -48,7 +48,7 @@ export class Player {
     this.climbT = 0;
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
     this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
-    this.runT = 0; this.dj = false; this.lastGround = null;
+    this.runT = 0; this.dj = false; this.lastGround = null; this.lsUsed = false; this.blizT = 0; this.slamming = false;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -312,6 +312,71 @@ export class Player {
         g.nuke(this, pt);
         break;
       }
+      case 'spear':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        g.fireBolt(this, f, { speed: 140, R: 1.8, DMG: 55, color: 0xdfe6ee, size: 0.5 });
+        break;
+      case 'decoy':
+        g.addDecoy(this);
+        g.sfx.cancel(); g.ui.toast('🧍 Decoy placed: bots are chasing it');
+        break;
+      case 'anchor':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        this.slamming = true; this.slamY = this.pos.y; this.braking = false; this.glideT = 0; this.jetT = 0;
+        if (this.onGround) { this.vel.set(0, 17, 0); this.onGround = false; this.pos.y += 0.1; this.slamDelay = 0.4; }
+        else { this.vel.set(this.vel.x * 0.2, -55, this.vel.z * 0.2); this.slamDelay = 0; }
+        g.sfx.zip();
+        break;
+      case 'overcharge':
+        for (const k in this.cd) if (k !== 'overcharge') this.cd[k] = 0;
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fffb0, 30, 8, 0.25);
+        g.sfx.buy(); g.ui.toast('🔋 All cooldowns reset!');
+        break;
+      case 'blink': {
+        const o = this.eye(_a);
+        const wh = g.world.raycast(o, f, 20);
+        const dist = wh ? Math.max(0, wh.dist - 1.2) : 20;
+        if (dist < 1.5) { g.ui.toast('💫 Something is in the way'); return false; }
+        _b.copy(this.pos); _b.y += 0.8; g.particles.burst(_b, 0xb48bff, 18, 6, 0.2);
+        this.pos.addScaledVector(f, dist);
+        const gy = g.world.groundAt(this.pos.x, this.pos.y + 1.5, this.pos.z);
+        if (gy !== null && gy > this.pos.y - 0.05 && gy - this.pos.y < 2) this.pos.y = gy + 0.05;
+        this.braking = false; this.hist.length = 0;
+        _b.copy(this.pos); _b.y += 0.8; g.particles.burst(_b, 0xb48bff, 18, 6, 0.2);
+        g.sfx.cancel();
+        break;
+      }
+      case 'blizzard':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        this.blizT = 4; this.blizTick = 0;
+        g.sfx.parry(); g.ui.toast('🌨️ BLIZZARD!');
+        break;
+      case 'shadowstep': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const o = g.camera.position;
+        const eh = g.hitTestEntities(o, f, 60, this.id, false);
+        let tg = eh ? eh.ent : null;
+        if (!tg) {
+          let bd = 60;
+          const t2 = (e) => { if (e.dead || e === this) return; const d = e.pos.distanceTo(this.pos); if (d < bd) { bd = d; tg = e; } };
+          g.enemies.forEach(t2); g.remotes.forEach(t2);
+        }
+        if (!tg) { g.ui.toast('🗡️ No enemy within 60 m'); return false; }
+        _b.subVectors(tg.pos, this.pos).setY(0);
+        if (_b.lengthSq() < 1e-4) _b.set(0, 0, 1);
+        _b.normalize();
+        const back = 2.2 + (tg.scale || 1) * 0.8;
+        const bx = tg.pos.x + _b.x * back, bz = tg.pos.z + _b.z * back;
+        const gy = g.world.groundAt(bx, tg.pos.y + 3, bz);
+        _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x8a1030, 20, 6, 0.2);
+        this.pos.set(bx, gy !== null && Math.abs(gy - tg.pos.y) < 5 ? gy + 0.05 : tg.pos.y + 0.5, bz);
+        this.vel.set(0, 0, 0); this.braking = false; this.hook.state = HOOK.IDLE; this.hist.length = 0;
+        this.yaw = Math.atan2(_b.x, _b.z); this.pitch = 0;
+        g.deliverHit(tg.id, { mode: 'bump', dmg: 60, k: 1.6, d: [-_b.x, 0, -_b.z], attacker: this.id, aname: g.name });
+        _a.copy(tg.pos); _a.y += 0.8 * (tg.scale || 1); g.particles.burst(_a, 0xff2a4a, 30, 10, 0.25);
+        g.sfx.hit(); g.ui.hitMarker(); g.shake(0.4); g.ui.toast('🗡️ BACKSTAB!');
+        break;
+      }
       case 'parry':
         this.parryT = 2; this.parried.clear();
         _a.copy(this.pos); _a.y += 0.8;
@@ -395,6 +460,11 @@ export class Player {
     } else if (hit.mode === 'latch') {
       g.ui.toast(`⚠️ ${hit.aname} hooked you!`);
     }
+    if (this.hp <= 0 && this.has('laststand') && !this.lsUsed) {
+      this.lsUsed = true; this.hp = 1; this.shieldT = 2;
+      _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0xffffff, 30, 9, 0.3);
+      g.ui.toast('🛡️ LAST STAND! Get out of there!'); g.sfx.parry();
+    }
     if (this.hp <= 0) this.die(`Taken out by ${hit.aname}`);
   }
 
@@ -416,7 +486,8 @@ export class Player {
     const running = input.run || input.stickMag > 0.92;
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (this.runT > 0 && wl < 0.1 && hs > 1) { wx = this.vel.x / hs; wz = this.vel.z / hs; } // RUNNER keeps you going
-    const maxSp = this.runT > 0 ? Math.max(34, s.speed * 2.2) : (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1);
+    const adr = this.has('adrenaline') && this.hp < s.health * 0.3 ? 1.4 : 1;
+    const maxSp = this.runT > 0 ? Math.max(34, s.speed * 2.2) : (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1) * adr;
     if (this.onGround) {
       if (hs > maxSp + 1) {
         const k = Math.max(0, 1 - 3.5 * dt);
@@ -429,7 +500,7 @@ export class Player {
       }
       if (input.consumeJump()) { this.vel.y = 9.5; this.onGround = false; g.sfx.jump(); }
     } else {
-      const air = (this.glideT > 0 ? 34 : 16) * dt;
+      const air = (this.glideT > 0 ? 34 : this.has('aircontrol') ? 40 : 16) * dt;
       const nvx = this.vel.x + wx * air, nvz = this.vel.z + wz * air;
       const nhs = Math.hypot(nvx, nvz), lim = Math.max(hs, this.glideT > 0 ? 24 : maxSp);
       if (nhs > lim && nhs > 0) { this.vel.x = (nvx / nhs) * lim; this.vel.z = (nvz / nhs) * lim; }
@@ -460,10 +531,24 @@ export class Player {
     if (this.superShot > 0) { this.superShot -= dt; if (this.onGround && this.superShot < 9.5) this.superShot = 0; }
     this.histT -= dt;
     if (this.histT <= 0) { this.histT = 0.1; this.hist.push(this.pos.clone()); if (this.hist.length > 30) this.hist.shift(); }
+    if (this.slamming && this.slamDelay > 0) { this.slamDelay -= dt; if (this.slamDelay <= 0) { this.slamY = Math.max(this.slamY, this.pos.y); this.vel.set(this.vel.x * 0.2, -55, this.vel.z * 0.2); } }
+    else if (this.slamming && this.vel.y > -55) this.vel.y = -55;
+    if (this.slamming) { _b.copy(this.pos); _b.y += 1; if (Math.random() < dt * 40) g.particles.burst(_b, 0xdfe6ee, 2, 2, 0.15); }
     const wasAir = !this.onGround, preSpeed = Math.hypot(this.vel.x, this.vel.z);
     integrate(this, dt, g.world);
     wallClimb(this, s.climbReach, s.climbSpeed);
     if (this.onGround) this.dj = false;
+    if (this.slamming && (this.onGround || this.inWater) && !(this.slamDelay > 0)) {
+      this.slamming = false;
+      const drop = Math.max(0, this.slamY - this.pos.y);
+      const dmg = Math.round(25 + Math.min(35, drop * 0.7));
+      g.blast(this.pos, g.ownerOf(this), 10, dmg, true, true, 1.5);
+      _b.copy(this.pos); _b.y += 0.3;
+      g.particles.burst(_b, 0xdfe6ee, 40, 16, 0.35); g.particles.burst(_b, 0x6a5a4a, 26, 10, 0.45);
+      g.shake(0.7); g.sfx.thunk(); g.sfx.hurt();
+      this.vel.x = 0; this.vel.z = 0;
+    }
+    if (this.dead || this.pos.y < KILL_Y) this.slamming = false;
     if (this.runT > 0) {
       this.runT -= dt;
       if (Math.random() < dt * 30) { _b.copy(this.pos); _b.y += 0.2; g.particles.burst(_b, 0xffe08a, 2, 3, 0.2); }
@@ -493,7 +578,7 @@ export class Player {
       const rate = this.safe ? 15 : calm ? (rg ? 18 : 6) : 0;
       this.hp = Math.min(s.health, this.hp + rate * dt);
     }
-    const c = g.world.collectCoins(this.pos);
+    const c = g.world.collectCoins(this.pos, this.has('coinmagnet') ? 12 : undefined);
     if (c) g.addCoins(c * 2, true);
     if (this.pos.y < KILL_Y) this.die('You fell into the clouds!');
   }
@@ -532,6 +617,8 @@ export class Player {
           g.particles.burst(h.pos, 0xffb020, 34, 15, 0.4); g.particles.burst(h.pos, 0xff4a1a, 22, 11, 0.35); g.particles.burst(h.pos, 0x3a3a3a, 14, 7, 0.5);
           g.ui.toast('🎯💥 SNIPED!'); g.shake(0.5); g.sfx.near('thunk', h.pos); g.sfx.near('hurt', h.pos);
         }
+        if (!h.snipe && this.has('burning')) g.addDot(eh.ent.id, g.ownerOf(this), 8, 5);
+        if (h.snipe) { /* already exploded */ }
         else if (this.has('explosive')) {
           g.blast(h.pos, g.ownerOf(this), 4.5, 18, true, true, 1);
           g.particles.burst(h.pos, 0xffb020, 20, 10, 0.3); g.sfx.near('thunk', h.pos);

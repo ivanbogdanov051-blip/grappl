@@ -85,6 +85,16 @@ export const ENEMY_TYPES = {
     hookSpeed: 90, range: 130, cool: [1.8, 3], dmg: 1.4, bumpDmg: 20, bumpK: 2,
     w: { pull: 0.2, swap: 0, bomb: 0.6, approach: 0.2 }, boss: true, bossKind: 'hive', drop: 'missiles', spawn: 0,
   },
+  frostqueen: {
+    name: 'FROST QUEEN', color: 0x9fe6ff, scale: 3.1, hp: 900, reward: 350, walk: 4.5, run: 10,
+    hookSpeed: 125, range: 140, cool: [1.8, 3], dmg: 1.6, bumpDmg: 22, bumpK: 2.2, freeze: 3,
+    w: { pull: 0.6, swap: 0.15, approach: 0.25 }, boss: true, bossKind: 'frost', drop: 'blizzard', spawn: 0,
+  },
+  reaper: {
+    name: 'SKY REAPER', color: 0x3a0a14, scale: 2.6, hp: 800, reward: 350, walk: 6, run: 13.5,
+    hookSpeed: 140, range: 130, cool: [1.4, 2.4], dmg: 1.8, bumpDmg: 28, bumpK: 2.4, specialCd: 4.5,
+    w: { pull: 0.45, swap: 0.35, approach: 0.2 }, boss: true, bossKind: 'reaper', drop: 'shadowstep', spawn: 0,
+  },
   inferno: {
     name: 'INFERNO LORD', color: 0xd8400a, scale: 3.2, hp: 950, reward: 350, walk: 4.5, run: 10,
     hookSpeed: 120, range: 140, cool: [1.8, 3], dmg: 1.8, bumpDmg: 24, bumpK: 2.4,

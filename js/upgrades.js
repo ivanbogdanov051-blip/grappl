@@ -11,15 +11,15 @@ export const UPGRADES = [
   { key: 'speed', icon: '👟', name: 'Sprint Speed', desc: 'Running speed', val: (l) => 12 + 1.5 * l, unit: 'm/s' },
 ];
 
-export function computeStats(up) {
+export function computeStats(up, pas = {}) {
   const l = (k) => up[k] || 0;
   return {
-    range: 90 + 30 * l('range'),
+    range: (90 + 30 * l('range')) * (pas.longarm ? 1.4 : 1),
     hookSpeed: 130 + 35 * l('hookSpeed'),
-    pull: 56 + 9 * l('pull'),
+    pull: (56 + 9 * l('pull')) * (pas.turbopull ? 1.3 : 1),
     climbUp: 7 + 2.5 * l('climb'),
-    climbReach: 10 + 4 * l('climb'),
-    climbSpeed: 17 + 2.5 * l('climb'),
+    climbReach: 10 + 4 * l('climb') + (pas.wallrunner ? 10 : 0),
+    climbSpeed: 17 + 2.5 * l('climb') + (pas.wallrunner ? 5 : 0),
     damage: 20 + 8 * l('damage'),
     health: 100 + 25 * l('health'),
     speed: 12 + 1.5 * l('speed'),
@@ -38,6 +38,11 @@ export const ABILITIES = [
   { key: 'glide', icon: '🪂', name: 'Glide', cost: 30, cd: 12, desc: 'Fall slowly and steer freely through the air for 6 seconds.' },
   { key: 'bomb', icon: '💣', name: 'Hook Bomb', cost: 55, cd: 7, desc: 'Fire an exploding hook: up to 40 dmg and big knockback in 9 m. Blast yourself for a rocket jump!' },
   { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
+  { key: 'spear', icon: '🔱', name: 'Sky Spear', cost: 60, cd: 6, hk: ';', code: 'Semicolon', desc: 'Throw a super fast spear straight where you aim: 55 dmg to whoever it hits.' },
+  { key: 'decoy', icon: '🧍', name: 'Decoy', cost: 80, cd: 15, hk: "'", code: 'Quote', desc: 'Drop a fake you. For 7 s bots go after the decoy instead of you.' },
+  { key: 'anchor', icon: '⚓', name: 'Anchor Slam', cost: 70, cd: 8, hk: ',', code: 'Comma', desc: 'Dive straight down and smash the ground: up to 60 dmg in 10 m. The higher you fall from, the harder it hits.' },
+  { key: 'overcharge', icon: '🔋', name: 'Overcharge', cost: 300, cd: 40, hk: '.', code: 'Period', desc: 'Instantly reset the cooldowns of all your other abilities.' },
+  { key: 'blink', icon: '💫', name: 'Blink', cost: 60, cd: 5, hk: '/', code: 'Slash', desc: 'Teleport 20 m where you look (stops at walls).' },
   { key: 'snipe', icon: '🎯', name: 'SNIPE', cost: 200, cd: 2, hk: 'L', desc: 'Zoom in on the closest enemy. Your next shot flies 3× as far and 3× as fast, deals 2.5× damage and EXPLODES on impact (45 dmg in 7 m). Only works on enemies or players: if it hits a wall it does nothing.' },
   { key: 'barrage', icon: '🎆', name: 'MISSILE BARRAGE', super: true, cost: 500, cd: 18, hk: '-', code: 'Minus', desc: 'SUPER: fire 12 homing missiles at up to 6 targets within 100 m (40 dmg each, big blasts).' },
   { key: 'laser', icon: '🔴', name: 'DEATH LASER', super: true, cost: 800, cd: 25, hk: '=', code: 'Equal', desc: 'SUPER: a beam fires from your gun for 3.5 s and burns whatever you aim at (about 100 dmg per second, 200 m range).' },
@@ -60,6 +65,8 @@ ABILITIES.push(
   { key: 'thunder', icon: '⚡', name: 'Thunder Strike', rare: 'THUNDER KING', cost: 0, cd: 10, hk: 'V', desc: 'Call lightning where you aim (up to 120 m): up to 45 dmg in 7 m.' },
   { key: 'blackhole', icon: '🌀', name: 'Black Hole', rare: 'VOID MAW', cost: 0, cd: 18, hk: 'B', desc: 'Open a black hole where you aim. It sucks in enemies and players for 3 s, then bursts.' },
   { key: 'missiles', icon: '🐝', name: 'Hive Missiles', rare: 'HIVE QUEEN', cost: 0, cd: 14, hk: 'N', desc: 'Launch 4 homing stingers at the nearest targets (30 dmg each).' },
+  { key: 'blizzard', icon: '🌨️', name: 'Blizzard', rare: 'FROST QUEEN', cost: 0, cd: 18, hk: '[', code: 'BracketLeft', desc: 'A blizzard swirls around you for 4 s: everyone within 22 m keeps getting frozen and takes 8 dmg every 0.5 s.' },
+  { key: 'shadowstep', icon: '🗡️', name: 'Shadow Step', rare: 'SKY REAPER', cost: 0, cd: 8, hk: ']', code: 'BracketRight', desc: 'Teleport behind the enemy you aim at (or the nearest one within 60 m) and backstab it for 60 dmg.' },
   { key: 'meteor', icon: '☄️', name: 'Meteor Storm', rare: 'INFERNO LORD', cost: 0, cd: 16, hk: 'Z', desc: 'Rain 7 meteors down where you aim (30 dmg each in 5 m).' },
 );
 export const ABILITY = Object.fromEntries(ABILITIES.map((a) => [a.key, a]));
@@ -79,5 +86,15 @@ export const PASSIVES = [
   { key: 'thorns', icon: '🌵', name: 'Thorns', cost: 2000, desc: 'Anyone who hurts you takes 10 damage back.' },
   { key: 'explosive', icon: '💥', name: 'Explosive Hook', cost: 3000, desc: 'Your hook explodes when it hits someone (18 dmg in 4.5 m).' },
   { key: 'regen', icon: '❤️‍🩹', name: 'Regenerator', cost: 1500, desc: 'Health comes back 3× faster and starts after 2 s instead of 4 s.' },
+  { key: 'aircontrol', icon: '🪶', name: 'Air Control', cost: 1500, desc: 'Steer 2.5× better while flying through the air.' },
+  { key: 'coinmagnet', icon: '🧲', name: 'Coin Magnet', cost: 1500, desc: 'Pick up coins from 12 m away (also dropped coin bags).' },
+  { key: 'longarm', icon: '🎯', name: 'Long Arm', cost: 2500, desc: 'Your hook reaches 40% further.' },
+  { key: 'turbopull', icon: '🚀', name: 'Turbo Pull', cost: 2500, desc: 'Pulls launch you 30% faster.' },
+  { key: 'laststand', icon: '🛡️', name: 'Last Stand', cost: 4000, desc: 'Once per life, a hit that would kill you leaves you at 1 HP with 2 s of invincibility.' },
+  { key: 'burning', icon: '🔥', name: 'Burning Hook', cost: 2000, desc: 'Your hook sets targets on fire: 40 extra dmg over 4 s.' },
+  { key: 'wallrunner', icon: '🧗', name: 'Wall Runner', cost: 1500, desc: 'Scramble up walls 10 m higher and faster.' },
+  { key: 'bloodlust', icon: '🩸', name: 'Bloodlust', cost: 2000, desc: 'Every kill heals you 30 HP.' },
+  { key: 'bounty', icon: '🏆', name: 'Bounty Hunter', cost: 2500, desc: '+25 coins for every kill (+150 for bosses).' },
+  { key: 'adrenaline', icon: '💢', name: 'Adrenaline', cost: 3000, desc: 'Below 30% health you move 40% faster and deal 50% more damage.' },
 ];
 export const PASSIVE = Object.fromEntries(PASSIVES.map((p) => [p.key, p]));

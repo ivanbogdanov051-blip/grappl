@@ -195,3 +195,5 @@ body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162
 .upg.passive button { min-width: 96px; }
 .shopHint { font-size: 13px; background: rgba(150,80,255,0.18); border: 1px solid rgba(190,140,255,0.4); padding: 8px 10px; border-radius: 10px; }
 #runFx { box-shadow: inset 0 0 90px 18px rgba(255,220,120,0.45); }
+
+#deathCoins { color: #ffd23a; font-weight: 800; font-size: 16px; margin: 4px 0; }

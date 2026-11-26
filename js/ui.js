@@ -168,6 +168,11 @@ export class UI {
     $('death').classList.remove('hidden');
     this.deathCount(5);
   }
+  deathCoins(n) {
+    let el = $('deathCoins');
+    if (!el) { el = document.createElement('div'); el.id = 'deathCoins'; $('deathMsg').after(el); }
+    el.textContent = n > 0 ? `💰 You dropped ${n} coins! Follow the gold beam to grab them back before someone else does.` : '';
+  }
   deathCount(n) { $('deathCount').textContent = n; }
   hideDeath() { $('death').classList.add('hidden'); }
 

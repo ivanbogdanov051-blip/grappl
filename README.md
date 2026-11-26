@@ -58,6 +58,8 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | Splitter | magenta, big | 90 | 40 | Splits into 2 fast Splitlings (22 HP, 15 coins each) when it dies |
 | Medic | light pink | 55 | 50 | Stays back and heals nearby enemies (bosses too). Kill it first! |
 | Kamikaze | bright red, small | 35 | 35 | Dives at you, sparks for 0.7 s, then explodes (9 m). Kill it, freeze it or get away |
+| 👑 **Frost Queen** (boss) | ice-blue giant | 900 | 350 | Freezing hooks, a frost nova that freezes everyone within 24 m, and summons Frostbites. Drops **🌨️ Blizzard** |
+| 👑 **Sky Reaper** (boss) | dark crimson giant | 800 | 350 | Fast; teleports behind you ("is behind you!" warning) and strikes, summons Phantoms. Drops **🗡️ Shadow Step** |
 | 👑 **Inferno Lord** (boss) | orange-red giant | 950 | 350 | Rains meteors on you (red rings, so move!) and leaps across islands to slam down next to you. Drops **☄️ Meteor Storm** |
 | 👑 **Thunder King** (boss) | blue giant | 850 | 300 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
 | 👑 **Void Maw** (boss) | black-purple giant | 1000 | 350 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
@@ -65,6 +67,8 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | **Sky Titan** (boss, drops 🌋 Titan Slam) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
 
 ## Rules
+
+- **When you die you drop ALL your coins** in a bag (with a gold beam) where you died, or where you fell from if you fell into the clouds. Grab it back before anyone else does: in multiplayer other players can steal it. Bags vanish after 3 minutes. Upgrades, abilities and passives are never lost.
 
 - Falling into the clouds kills you. You respawn on the **spawn island** after 5 seconds. Spawn is a safe zone: nobody can hurt you there, you can't hurt anyone from there, and you heal quickly there. Everywhere else your health regenerates slowly once you go 4 seconds without taking damage. Its blue light beam is visible from far away.
 - Coins come from pickups (2 each), killing enemies (30) and killing players (50). Your coins and upgrades are saved in your browser.
@@ -94,6 +98,11 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | H | 🚀 Jetpack | 12 s | Fly wherever you look for 2.5 s |
 | J | 🩸 Vampire | 16 s | For 6 s you heal half of the damage you deal |
 | K | 😡 Rage | 15 s | For 5 s you deal double damage |
+| ; | 🔱 Sky Spear (60) | 6 s | A super fast spear straight where you aim, 55 damage |
+| ' | 🧍 Decoy (80) | 15 s | A fake you: bots chase it instead of you for 7 s |
+| , | ⚓ Anchor Slam (70) | 8 s | Dive down and smash the ground: up to 60 damage in 10 m, more from higher up |
+| . | 🔋 Overcharge (300) | 40 s | Resets all your other cooldowns |
+| / | 💫 Blink (60) | 5 s | Teleport 20 m where you look |
 | L | 🎯 **SNIPE** (200 coins) | 2 s | Zooms in and locks onto the closest enemy. Your next shot has 3× range and speed, deals 2.5× damage and explodes on impact (45 damage in 7 m), but only works on enemies/players: if it hits a wall it just fizzles (no grab, no pull). ✕ cancels it |
 | - | 🎆 **MISSILE BARRAGE** (500, SUPER) | 18 s | 12 homing missiles at up to 6 targets within 100 m, 40 damage each |
 | = | 🔴 **DEATH LASER** (800, SUPER) | 25 s | A beam from your gun for 3.5 s that burns whatever you aim at, about 100 damage per second, 200 m range |
@@ -118,6 +127,16 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | 🌵 Thorns | 2000 | Anyone who hurts you takes 10 damage back |
 | 💥 Explosive Hook | 3000 | Your hook explodes when it hits someone (18 damage in 4.5 m) |
 | ❤️‍🩹 Regenerator | 1500 | Health regenerates 3× faster and starts after 2 s instead of 4 s |
+| 🪶 Air Control | 1500 | Steer 2.5× better in the air |
+| 🧲 Coin Magnet | 1500 | Pick up coins (and coin bags) from 12 m away |
+| 🎯 Long Arm | 2500 | Hook reaches 40% further |
+| 🚀 Turbo Pull | 2500 | Pulls launch you 30% faster |
+| 🛡️ Last Stand | 4000 | Once per life, a killing hit leaves you at 1 HP with 2 s of invincibility |
+| 🔥 Burning Hook | 2000 | Your hook sets targets on fire: 40 extra damage over 4 s |
+| 🧗 Wall Runner | 1500 | Climb walls 10 m higher and faster |
+| 🩸 Bloodlust | 2000 | Every kill heals 30 HP |
+| 🏆 Bounty Hunter | 2500 | +25 coins per kill (+150 for bosses) |
+| 💢 Adrenaline | 3000 | Below 30% health: 40% faster and 50% more damage |
 
 ## Music
 
@@ -133,6 +152,8 @@ Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock
 | V | ⚡ Thunder Strike: lightning where you aim, up to 45 damage | 10 s | Thunder King |
 | B | 🌀 Black Hole: sucks everyone in for 3 s, then bursts | 18 s | Void Maw |
 | N | 🐝 Hive Missiles: 4 homing stingers, 30 damage each | 14 s | Hive Queen |
+| [ | 🌨️ Blizzard: freezes and damages everyone within 22 m for 4 s | 18 s | Frost Queen |
+| ] | 🗡️ Shadow Step: teleport behind an enemy and backstab it for 60 | 8 s | Sky Reaper |
 | Z | ☄️ Meteor Storm: 7 meteors rain down where you aim, 30 damage each | 16 s | Inferno Lord |
 
 ## Multiplayer

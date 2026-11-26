@@ -218,10 +218,20 @@ export class Enemy {
       if (T.bossKind === 'void' && this.specialCool <= 0 && d < 45) { this.specialCool = 7; this.pulseN = 3; this.pulseT = 0; }
       if (T.bossKind === 'hive' && this.specialCool <= 0) { this.specialCool = 10; g.hiveSummon(this); }
       if (T.special === 'magnet' && this.specialCool <= 0 && d < 32) { this.specialCool = T.specialCd; g.enemyMagnet(this); return; }
-      if (T.special === 'blink' && this.specialCool <= 0 && d < 70 && d > 6 && tg.ground) {
+      if (T.bossKind === 'frost' && this.specialCool <= 0) {
+        this.specialCool = 6; this.frostN = (this.frostN || 0) + 1;
+        if (this.frostN % 3 === 0) g.hiveSummon(this, ['frost', 'frost']);
+        else if (d < 26) { g.enemyFrostNova(this, 24); return; }
+      }
+      if (T.bossKind === 'reaper') {
+        this.summonCool = (this.summonCool ?? 8) - 0.4;
+        if (this.summonCool <= 0) { this.summonCool = 14; g.hiveSummon(this, ['phantom', 'phantom']); }
+      }
+      if ((T.special === 'blink' || T.bossKind === 'reaper') && this.specialCool <= 0 && d < 70 && d > 6 && tg.ground) {
         // teleport right behind the target, then shove them
         _b.subVectors(tg.pos, me).setY(0).normalize();
-        const bx = tg.pos.x + _b.x * 3, bz = tg.pos.z + _b.z * 3;
+        const back = 3 * Math.max(1, this.scale * 0.8);
+        const bx = tg.pos.x + _b.x * back, bz = tg.pos.z + _b.z * back;
         const gy = w.groundAt(bx, tg.pos.y + 3, bz);
         if (gy !== null && Math.abs(gy - tg.pos.y) < 4) {
           this.specialCool = T.specialCd;
@@ -229,7 +239,8 @@ export class Enemy {
           me.set(bx, gy + 0.2, bz); this.vel.set(0, 0, 0);
           _c.copy(me); _c.y += 0.7; g.particles.burst(_c, 0x8a9bff, 16, 6, 0.2);
           this.yaw = Math.atan2(_b.x, _b.z);
-          this.bumpCool = 0; this.think = 0.15;
+          this.bumpCool = 0; this.think = T.boss ? 0.45 : 0.15; // the boss gives you a moment to react
+          if (T.boss) g.ui.toast(`🗡️ ${T.name} is behind you!`);
           g.sfx.near('cancel', me);
           return;
         }
