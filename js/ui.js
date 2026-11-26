@@ -193,7 +193,7 @@ export class UI {
       o.cd.style.height = (left / o.max) * 100 + '%';
       o.cd.textContent = left > 0 ? Math.ceil(left) : '';
       o.b.classList.toggle('ready', left <= 0);
-      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0) || (k === 'cloak' && p.cloakT > 0) || (k === 'jetpack' && p.jetT > 0) || (k === 'vampire' && p.vampT > 0) || (k === 'rage' && p.rageT > 0) || (k === 'timewarp' && this.g.warpT > 0));
+      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0) || (k === 'cloak' && p.cloakT > 0) || (k === 'jetpack' && p.jetT > 0) || (k === 'vampire' && p.vampT > 0) || (k === 'rage' && p.rageT > 0) || (k === 'timewarp' && this.g.warpT > 0) || (k === 'snipe' && p.snipeT > 0));
     }
   }
   openShop() { this.renderShop(); $('shop').classList.remove('hidden'); }

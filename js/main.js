@@ -220,6 +220,7 @@ class Game {
   look(dx, dy) {
     if (this.shopOpen || !this.running) return;
     const p = this.player;
+    if (p.snipeT > 0) { dx *= 0.4; dy *= 0.4; }
     p.yaw -= dx;
     p.pitch = Math.max(-1.5, Math.min(1.5, p.pitch - dy));
     this.swayX = Math.max(-0.04, Math.min(0.04, this.swayX - dx * 0.25));
@@ -943,8 +944,8 @@ class Game {
       const sk = this.shakeAmt * this.shakeAmt * 0.06;
       cam.rotation.set(p.pitch + (Math.random() - 0.5) * sk, p.yaw + (Math.random() - 0.5) * sk, 0);
       const sp = p.vel.length();
-      const fov = 75 + Math.min(22, Math.max(0, sp - 12) * 0.4);
-      cam.fov += (fov - cam.fov) * Math.min(1, 5 * dt);
+      const fov = p.snipeT > 0 ? 28 : 75 + Math.min(22, Math.max(0, sp - 12) * 0.4);
+      cam.fov += (fov - cam.fov) * Math.min(1, (p.snipeT > 0 ? 10 : 5) * dt);
       cam.updateProjectionMatrix();
       cam.updateMatrixWorld();
       this.sfx.wind(p.dead ? 0 : sp);
@@ -972,7 +973,7 @@ class Game {
     const r = this.renderer;
     if (this.composer) this.composer.render();
     else { r.clear(); r.render(this.scene, cam); }
-    if (this.running && !p.dead) { r.clearDepth(); r.render(this.gunScene, this.gunCam); }
+    if (this.running && !p.dead && !(p.snipeT > 0)) { r.clearDepth(); r.render(this.gunScene, this.gunCam); }
   }
 
   updateHand(dt) {
@@ -1051,7 +1052,7 @@ class Game {
         ui.bossArrow(ff - Math.atan2(dx, dz), ad);
       } else ui.bossArrow(null);
       ui.parry(p.parryT > 0);
-      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0);
+      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0); ui.fx('scopeFx', p.snipeT > 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -1438,6 +1439,27 @@ if (location.search.includes("autotest")) {
       }
       p.hp = 100;
       log.round5 = r5;
+      {
+        // SNIPE: lock on through a wall, 3x range, damage x2.5
+        const sn = {};
+        game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+        reset(); p.yaw += 2; game.save.abil.snipe = true; game.ui.renderAbilities();
+        const e = new Enemy(game, p.pos.clone().add(new THREE.Vector3(0, 0.3, -40)), 'brute'); e.think = 999; e.wdT = 999; game.enemies.push(e); sim(0.2);
+        const yaw0 = p.yaw;
+        sn.used = p.useAbility('snipe'); sim(0.5);
+        sn.turned = Math.abs(yaw0 - p.yaw) > 0.5; sn.fov = Math.round(game.camera.fov);
+        // put a wall in the way: force world raycasts to hit, the snipe must ignore them
+        const orc = game.world.raycast.bind(game.world);
+        game.world.raycast = (o, d, len) => ({ point: o.clone().addScaledVector(d, Math.min(len, 1)), dist: Math.min(len, 1) });
+        p.shoot(); sim(0.4);
+        game.world.raycast = orc;
+        sn.dmg = 160 - e.hp; sn.hookState = p.hook.state;
+        sim(1); sn.fovAfter = Math.round(game.camera.fov);
+        sn.button = !!document.querySelector('#abilities .ab.snipe');
+        p.cancel(); sim(0.5);
+        e.dead = true; e.dispose(); game.enemies = [];
+        log.snipe = sn;
+      }
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;
     out.textContent = "AUTOTEST " + JSON.stringify(log);

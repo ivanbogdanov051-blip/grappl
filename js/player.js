@@ -23,7 +23,7 @@ export class Player {
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
     this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
-    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -45,7 +45,7 @@ export class Player {
     this.lastAttacker = null;
     this.climbT = 0;
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
-    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -69,6 +69,8 @@ export class Player {
       h.dir.copy(f);
       h.dist = 0.4; h.target = null; h.swap = false; h.bomb = false;
       h.super = this.superShot > 0 && !this.onGround;
+      h.snipe = this.snipeT > 0;
+      if (h.snipe) { this.snipeT = 0; h.super = false; g.sfx.parry(); }
       if (h.super) { this.superShot = 0; g.ui.toast('⚡ SUPER SHOT'); }
       h.state = HOOK.FLYING;
       g.sfx.shoot();
@@ -96,6 +98,7 @@ export class Player {
   }
   cancel() {
     const h = this.hook;
+    if (this.snipeT > 0 && h.state === HOOK.IDLE) { this.snipeT = 0; this.game.ui.toast('🎯 Snipe cancelled'); return; }
     if (h.state === HOOK.FLYING || h.state === HOOK.ATTACHED || h.state === HOOK.LATCHED) {
       h.state = HOOK.RETRACT;
       this.game.sfx.cancel();
@@ -268,6 +271,24 @@ export class Player {
         g.meteorRain(this, pt, 7, 9, false);
         break;
       }
+      case 'snipe': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        if (this.hook.state !== HOOK.IDLE) this.hook.state = HOOK.IDLE;
+        // lock onto the closest enemy / player in sniping range
+        const maxD = this.stats.range * 3;
+        let best = null, bd = maxD;
+        const test = (ent) => { if (ent.dead || ent === this) return; const d = ent.pos.distanceTo(this.pos); if (d < bd) { bd = d; best = ent; } };
+        g.enemies.forEach(test); g.remotes.forEach(test);
+        if (best) {
+          const e = this.eye(_a), sc = best.scale || 1;
+          const dx = best.pos.x - e.x, dy = best.pos.y + 0.7 * sc - e.y, dz = best.pos.z - e.z;
+          this.yaw = Math.atan2(-dx, -dz); this.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+        }
+        this.snipeT = 8;
+        g.sfx.cancel();
+        g.ui.toast(best ? `🎯 Locked on ${best.name} (${Math.round(bd)} m). Shoot!` : '🎯 Sniper ready (no target in range). Shoot!');
+        break;
+      }
       case 'parry':
         this.parryT = 2; this.parried.clear();
         _a.copy(this.pos); _a.y += 0.8;
@@ -393,7 +414,7 @@ export class Player {
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
     if (this.shieldT > 0) this.shieldT -= dt;
     if (this.parryT > 0) this.parryT -= dt;
-    for (const k of ['slowT', 'cloakT', 'vampT', 'rageT']) if (this[k] > 0) this[k] -= dt;
+    for (const k of ['slowT', 'cloakT', 'vampT', 'rageT', 'snipeT']) if (this[k] > 0) this[k] -= dt;
     if (this.jetT > 0) {
       this.jetT -= dt;
       const jf = this.forward(_c);
@@ -424,9 +445,9 @@ export class Player {
   updateHook(dt) {
     const h = this.hook, g = this.game, s = this.stats;
     if (h.state === HOOK.FLYING) {
-      const mul = h.super ? 2 : 1;
+      const mul = h.snipe ? 3 : h.super ? 2 : 1;
       const step = s.hookSpeed * mul * dt;
-      const wh = g.world.raycast(h.pos, h.dir, step);
+      const wh = h.snipe ? null : g.world.raycast(h.pos, h.dir, step); // a snipe flies through walls
       const wd = wh ? wh.dist : Infinity;
       if (wh) _c.copy(wh.point);
       const eh = this.safe ? null : g.hitTestEntities(h.pos, h.dir, step, this.id, false);
@@ -448,7 +469,9 @@ export class Player {
         h.state = HOOK.LATCHED;
         h.target = eh.ent.id;
         h.pos.copy(eh.ent.pos); h.pos.y += 0.7;
-        g.deliverHit(eh.ent.id, { mode: 'latch', dmg: s.damage, attacker: this.id, aname: g.name });
+        g.deliverHit(eh.ent.id, { mode: 'latch', dmg: Math.round(s.damage * (h.snipe ? 2.5 : 1)), attacker: this.id, aname: g.name });
+        if (h.snipe) { g.ui.toast('🎯 SNIPED!'); g.particles.burst(h.pos, 0xff3a3a, 24, 10, 0.25); g.shake(0.3); }
+        h.snipe = false;
         g.sfx.hit(); g.ui.hitMarker();
         g.particles.burst(h.pos, 0xffffff, 10, 6, 0.15);
       } else if (wh && h.swap) {
@@ -461,7 +484,8 @@ export class Player {
       } else {
         h.pos.addScaledVector(h.dir, step);
         h.dist += step;
-        if (h.dist >= s.range * mul) h.state = HOOK.RETRACT;
+        if (h.snipe) g.particles.burst(h.pos, 0xff5050, 1, 0.5, 0.25);
+        if (h.dist >= s.range * mul) { h.state = HOOK.RETRACT; h.snipe = false; }
       }
     } else if (h.state === HOOK.LATCHED) {
       const tg = g.getEntity(h.target);

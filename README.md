@@ -94,6 +94,7 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | H | 🚀 Jetpack | 12 s | Fly wherever you look for 2.5 s |
 | J | 🩸 Vampire | 16 s | For 6 s you heal half of the damage you deal |
 | K | 😡 Rage | 15 s | For 5 s you deal double damage |
+| L | 🎯 **SNIPE** (200 coins) | 10 s | Zooms in and locks onto the closest enemy. Your next shot has 3× range and speed, flies through walls (only hits enemies/players) and deals 2.5× damage. ✕ cancels it |
 | R | ⚔️ **PARRY** (200 coins) | 10 s | For 2 s you can't be hurt, and anyone who hits you gets launched at you at super speed and takes 50 damage. You deal no damage while parrying |
 
 **Button bar:** it holds 10 abilities on phones and 12 on PC (PARRY always has its own button). In the shop, owned abilities have an **✓ ON BAR / + ADD TO BAR** button to choose which ones get a button. On PC every owned ability works on its key either way.
