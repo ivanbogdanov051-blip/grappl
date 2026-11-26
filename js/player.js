@@ -23,7 +23,7 @@ export class Player {
     this.hook = { state: HOOK.IDLE, pos: new V(), dir: new V(), dist: 0, target: null, anchor: new V() };
     this.safe = true;
     this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
-    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
   }
   get stats() { return this.game.stats; }
   eye(out = new V()) { return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
@@ -45,13 +45,13 @@ export class Player {
     this.lastAttacker = null;
     this.climbT = 0;
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
-    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0;
+    this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
     this.game.ui.hideDeath();
   }
   die(msg) {
     if (this.dead) return;
     this.dead = true;
-    this.deadT = 5;
+    this.deadT = 5; this.laserT = 0;
     this.hp = 0;
     this.hook.state = HOOK.IDLE;
     this.game.onLocalDeath(this, msg);
@@ -289,6 +289,26 @@ export class Player {
         g.ui.toast(best ? `🎯 Locked on ${best.name} (${Math.round(bd)} m). Shoot!` : '🎯 Sniper ready (no target in range). Shoot!');
         break;
       }
+      case 'barrage':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        if (!g.fireMissiles(this, { targets: 6, per: 2, maxD: 100, R: 6, DMG: 40, color: 0xff5a3a })) { g.ui.toast('🎆 No targets within 100 m'); return false; }
+        g.ui.toast('🎆 MISSILE BARRAGE!'); g.shake(0.3);
+        break;
+      case 'laser':
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        this.laserT = 3.5; this.laserTick = 0;
+        g.ui.toast('🔴 DEATH LASER! Keep aiming'); g.sfx.parry();
+        break;
+      case 'nuke': {
+        if (this.safe) { g.ui.toast('🛡️ No attacking from the safe zone'); return false; }
+        const o = g.camera.position;
+        const wh = g.world.raycast(o, f, 160);
+        let pt = wh ? wh.point.clone() : o.clone().addScaledVector(f, 90);
+        const eh = g.hitTestEntities(o, f, wh ? wh.dist : 160, this.id, false);
+        if (eh) pt = o.clone().addScaledVector(f, eh.dist);
+        g.nuke(this, pt);
+        break;
+      }
       case 'parry':
         this.parryT = 2; this.parried.clear();
         _a.copy(this.pos); _a.y += 0.8;
@@ -470,7 +490,12 @@ export class Player {
         h.target = eh.ent.id;
         h.pos.copy(eh.ent.pos); h.pos.y += 0.7;
         g.deliverHit(eh.ent.id, { mode: 'latch', dmg: Math.round(s.damage * (h.snipe ? 2.5 : 1)), attacker: this.id, aname: g.name });
-        if (h.snipe) { g.ui.toast('🎯 SNIPED!'); g.particles.burst(h.pos, 0xff3a3a, 24, 10, 0.25); g.shake(0.3); }
+        if (h.snipe) {
+          // explosive snipe
+          g.blast(h.pos, g.ownerOf(this), 7, 45, true, true, 1.6);
+          g.particles.burst(h.pos, 0xffb020, 34, 15, 0.4); g.particles.burst(h.pos, 0xff4a1a, 22, 11, 0.35); g.particles.burst(h.pos, 0x3a3a3a, 14, 7, 0.5);
+          g.ui.toast('🎯💥 SNIPED!'); g.shake(0.5); g.sfx.near('thunk', h.pos); g.sfx.near('hurt', h.pos);
+        }
         h.snipe = false;
         g.sfx.hit(); g.ui.hitMarker();
         g.particles.burst(h.pos, 0xffffff, 10, 6, 0.15);

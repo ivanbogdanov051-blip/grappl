@@ -1,7 +1,7 @@
 // Keyboard + mouse (pointer lock) and touch (joystick, drag-look, buttons)
-import { ABILITIES, abilityKey } from './upgrades.js';
+import { ABILITIES, abilityCode } from './upgrades.js';
 const KEYMAP = {};
-for (const A of ABILITIES) { const k = abilityKey(A); KEYMAP[/\d/.test(k) ? 'Digit' + k : 'Key' + k] = A.key; }
+for (const A of ABILITIES) KEYMAP[abilityCode(A)] = A.key;
 export class Input {
   constructor(game, canvas, isTouch) {
     this.game = game; this.canvas = canvas; this.touch = isTouch;

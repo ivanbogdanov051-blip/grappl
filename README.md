@@ -94,7 +94,10 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | H | 🚀 Jetpack | 12 s | Fly wherever you look for 2.5 s |
 | J | 🩸 Vampire | 16 s | For 6 s you heal half of the damage you deal |
 | K | 😡 Rage | 15 s | For 5 s you deal double damage |
-| L | 🎯 **SNIPE** (200 coins) | 10 s | Zooms in and locks onto the closest enemy. Your next shot has 3× range and speed, deals 2.5× damage, but only works on enemies/players: if it hits a wall it just fizzles (no grab, no pull). ✕ cancels it |
+| L | 🎯 **SNIPE** (200 coins) | 2 s | Zooms in and locks onto the closest enemy. Your next shot has 3× range and speed, deals 2.5× damage and explodes on impact (45 damage in 7 m), but only works on enemies/players: if it hits a wall it just fizzles (no grab, no pull). ✕ cancels it |
+| - | 🎆 **MISSILE BARRAGE** (500, SUPER) | 18 s | 12 homing missiles at up to 6 targets within 100 m, 40 damage each |
+| = | 🔴 **DEATH LASER** (800, SUPER) | 25 s | A beam from your gun for 3.5 s that burns whatever you aim at, about 100 damage per second, 200 m range |
+| ` | ☢️ **NUKE** (1300, SUPER) | 45 s | Marks a spot up to 160 m away; 2 s later: 160 damage in 24 m plus a ring of meteors. It can't hurt you |
 | R | ⚔️ **PARRY** (200 coins) | 10 s | For 2 s you can't be hurt, and anyone who hits you gets launched at you at super speed and takes 50 damage. You deal no damage while parrying |
 
 **Button bar:** it holds 10 abilities on phones and 12 on PC (PARRY always has its own button). In the shop, owned abilities have an **✓ ON BAR / + ADD TO BAR** button to choose which ones get a button. On PC every owned ability works on its key either way.

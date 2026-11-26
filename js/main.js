@@ -410,6 +410,56 @@ class Game {
     this.mines.push({ pos, t: 25, arm: 0.6, owner: this.ownerOf(p), mesh });
     this.sfx.thunk();
   }
+  nuke(p, at) {
+    this.addStrike(at, 2.2, 24, 160, p, false, true);
+    // aftershock: a ring of meteors right after the main blast
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * TAU + Math.random() * 0.4, r = 10 + Math.random() * 12;
+      this.addStrike(new THREE.Vector3(at.x + Math.cos(ang) * r, at.y, at.z + Math.sin(ang) * r), 2.45 + i * 0.12, 5, 30, p, false, true);
+    }
+    this.ui.toast('☢️ NUKE INCOMING!');
+    this.sfx.parry();
+  }
+  updateLaser(p, dt) {
+    if (!(p.laserT > 0) || p.dead) { if (this.laserMesh) this.laserMesh.visible = false; return; }
+    p.laserT -= dt;
+    if (!this.laserMesh) {
+      const geo = new THREE.CylinderGeometry(0.35, 0.025, 1, 10, 1, true); geo.translate(0, 0.5, 0);
+      this.laserMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff1a1a, transparent: true, opacity: 0.8, depthWrite: false, fog: false, toneMapped: false }));
+      this.laserCore = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffeeee, depthWrite: false, fog: false, toneMapped: false }));
+      this.laserCore.scale.set(0.4, 1, 0.4);
+      this.laserMesh.add(this.laserCore);
+      this.laserMesh.frustumCulled = false; this.laserCore.frustumCulled = false;
+      this.scene.add(this.laserMesh);
+    }
+    const lv = this._lv || (this._lv = [0, 1, 2, 3].map(() => new THREE.Vector3()));
+    const o = this.camera.position, f = p.forward(lv[0]);
+    const wh = this.world.raycast(o, f, 200);
+    let dist = wh ? wh.dist : 200;
+    const eh = this.hitTestEntities(o, f, dist, p.id, false);
+    if (eh) dist = eh.dist;
+    const end = lv[1].copy(o).addScaledVector(f, dist);
+    const start = this.muzzleWorld(lv[2]);
+    const dir = lv[3].subVectors(end, start); const len = dir.length();
+    const L = this.laserMesh;
+    L.visible = true;
+    L.position.copy(start);
+    L.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.divideScalar(len || 1));
+    const wob = 1 + Math.sin(this.time * 60) * 0.25;
+    L.scale.set(wob * (1 + Math.min(1, p.laserT) * 0.5), len, wob * (1 + Math.min(1, p.laserT) * 0.5));
+    if (Math.random() < dt * 40) this.particles.burst(end, Math.random() < 0.5 ? 0xff4a1a : 0xffd23a, 3, 6, 0.2);
+    p.laserTick -= dt;
+    if (p.laserTick <= 0) {
+      p.laserTick = 0.1;
+      if (eh) {
+        const dx = eh.ent.pos.x - p.pos.x, dz = eh.ent.pos.z - p.pos.z, l = Math.hypot(dx, dz) || 1;
+        this.deliverHit(eh.ent.id, { mode: 'burn', dmg: 10, attacker: p.id, aname: this.name });
+        this.ui.hitMarker();
+      }
+      this.shake(0.12);
+    }
+    if (p.laserT <= 0) L.visible = false;
+  }
   removeMine(m) {
     this.scene.remove(m.mesh); m.mesh.material.dispose();
     this.mines.splice(this.mines.indexOf(m), 1);
@@ -450,19 +500,23 @@ class Game {
     this.wells.push({ pos: pos.clone(), t: 3, pulse: 0, owner: this.ownerOf(ownerEnt), core, halo });
     this.sfx.zip();
   }
-  fireMissiles(p) {
+  fireMissiles(p, o = {}) {
+    const targets = o.targets || 4, per = o.per || 1, maxD = o.maxD || 70;
     const list = [];
     for (const e of this.enemies) if (!e.dead) list.push(e);
     for (const r of this.remotes.values()) if (!r.dead) list.push(r);
-    const near = list.map((e) => [e, e.pos.distanceTo(p.pos)]).filter((x) => x[1] < 70).sort((a, b) => a[1] - b[1]).slice(0, 4);
-    near.forEach(([e], i) => {
-      const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: 0xffd23a }));
-      m.scale.setScalar(0.35);
+    const near = list.map((e) => [e, e.pos.distanceTo(p.pos)]).filter((x) => x[1] < maxD).sort((a, b) => a[1] - b[1]).slice(0, targets);
+    const shots = [];
+    for (let k = 0; k < per; k++) for (const n of near) shots.push(n[0]);
+    shots.forEach((e, i) => {
+      const m = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshBasicMaterial({ color: o.color || 0xffd23a }));
+      m.scale.setScalar(o.DMG ? 0.45 : 0.35);
       const start = p.eye(); start.y += 0.3;
       m.position.copy(start);
       this.scene.add(m);
-      const v = new THREE.Vector3((i - 1.5) * 9, 14, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw);
-      this.missiles.push({ pos: start, vel: v, target: e.id, t: 5, owner: this.ownerOf(p), mesh: m, trail: 0 });
+      const c = (shots.length - 1) / 2;
+      const v = new THREE.Vector3((i - c) * (per > 1 ? 4 : 9), 14 + (i % 3) * 3, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw);
+      this.missiles.push({ pos: start, vel: v, target: e.id, t: 6, owner: this.ownerOf(p), mesh: m, trail: 0, R: o.R, DMG: o.DMG });
     });
     if (near.length) this.sfx.shoot();
     return near.length;
@@ -500,6 +554,13 @@ class Game {
           this.blast(s.pos, s.owner, s.R, s.DMG, true, !s.fromEnemy, 1.2);
           this.particles.burst(s.pos, s.fire ? 0xff8a3a : 0xbfe4ff, 30, 14, 0.25);
           if (s.fire) this.particles.burst(s.pos, 0x3a2a2a, 14, 8, 0.4);
+          if (s.R >= 20) {
+            for (let k = 0; k < 4; k++) { _w.copy(s.pos); _w.y += k * 6; this.particles.burst(_w, k % 2 ? 0xffd23a : 0xff5a1a, 60, 26 + k * 6, 0.7); }
+            this.particles.burst(s.pos, 0x2a2020, 50, 14, 0.9);
+            const dn = s.pos.distanceTo(p.pos);
+            if (dn < 150) { this.shake(1.2 * (1 - dn / 150) + 0.3); this.hurtV = Math.max(this.hurtV, 0.3); }
+            this.ui.whiteFlash && this.ui.whiteFlash();
+          }
           const dp = s.pos.distanceTo(p.pos);
           if (dp < 60) this.shake(0.7 * (1 - dp / 60));
           this.hurtV = Math.max(this.hurtV, dp < 40 ? 0.15 : 0);
@@ -585,7 +646,7 @@ class Game {
         }
       }
       if (boom) {
-        this.blast(m.pos, m.owner, 4.5, 30, true, true);
+        this.blast(m.pos, m.owner, m.R || 4.5, m.DMG || 30, true, true);
         this.particles.burst(m.pos, 0xffb020, 16, 9, 0.25);
         this.sfx.near('thunk', m.pos);
         this.scene.remove(m.mesh); m.mesh.material.dispose();
@@ -921,6 +982,7 @@ class Game {
     if (this.running) {
       this.input.update(dt);
       p.update(dt, this.input);
+      this.updateLaser(p, dt);
       if (this.warpT > 0) this.warpT -= dt;
       const edt = this.warpT > 0 ? dt * 0.3 : dt;
       for (const e of this.enemies) e.update(edt);
@@ -1462,6 +1524,29 @@ if (location.search.includes("autotest")) {
         p.cancel(); sim(0.5);
         e.dead = true; e.dispose(); game.enemies = [];
         log.snipe = sn;
+      }
+      {
+        const su = {};
+        const clr = () => { game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = []; };
+        const mk3 = (off) => { const e = new Enemy(game, p.pos.clone().add(off), 'brute'); e.think = 999; e.wdT = 999; game.enemies.push(e); return e; };
+        for (const k of ['barrage', 'laser', 'nuke']) game.save.abil[k] = true;
+        game.ui.renderAbilities();
+        // explosive snipe splash: a second enemy next to the target takes damage too
+        clr(); reset(); game.save.abil.snipe = true;
+        const o40 = clearOff(35); const a1 = mk3(o40), a2 = mk3(o40.clone().add(new THREE.Vector3(2.5, 0, 0))); sim(0.2);
+        p.useAbility('snipe'); sim(0.3); const lockedA1 = Math.abs(a1.hp - 160) === 0; const t1 = a1.pos.clone(); t1.y += 1.2; aim(t1); p.shoot(); sim(0.6);
+        su.snipeExplosive = { target: 160 - a1.hp, splash: 160 - a2.hp, cd: ABILITY.snipe.cd };
+        clr();
+        reset(); const bs = [mk3(clearOff(30)), mk3(clearOff(45)), mk3(clearOff(60))]; sim(0.2);
+        su.barrageFired = p.useAbility('barrage') && game.missiles.length; sim(4); su.barrageDmg = bs.map((e) => e.dead ? 'dead' : 160 - e.hp); clr();
+        reset(); const le = mk3(clearOff(40)); sim(0.2); const lt = le.pos.clone(); lt.y += 1.2; aim(lt); p.useAbility('laser');
+        for (let i = 0; i < 60; i++) { if (!le.dead) { const q = le.pos.clone(); q.y += 1.2; aim(q); } sim(0.04); }
+        su.laser = { ticks: Math.round(3.5 / 0.1), dmg: le.dead ? 'dead' : 160 - le.hp, beam: !!(game.laserMesh && game.laserMesh.visible) }; sim(2); su.laser.beamAfter = game.laserMesh.visible; clr();
+        reset(); const ne = [mk3(clearOff(40)), mk3(clearOff(40).add(new THREE.Vector3(8, 0, 0)))]; sim(0.2); const nt = ne[0].pos.clone(); nt.y += 1; aim(nt);
+        const hp0 = p.hp; p.useAbility('nuke'); sim(4.5); su.nuke = { dmg: ne.map((e) => e.dead ? 'dead' : 160 - e.hp), meHurt: hp0 - p.hp }; clr();
+        su.keyMinus = (() => { reset(); p.cd = {}; mk3(clearOff(30)); sim(0.1); dispatchEvent(new KeyboardEvent('keydown', { code: 'Minus' })); return (p.cd.barrage || 0) > 0; })(); clr();
+        su.superButtons = document.querySelectorAll('#abilities .ab.super').length;
+        log.superAbilities = su;
       }
     }
     log.coins = game.save.coins; log.chunks = game.world.built.size; log.errors = window.__errs;

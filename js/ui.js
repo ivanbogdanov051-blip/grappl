@@ -182,6 +182,7 @@ export class UI {
       b.addEventListener('mousedown', fire);
       (A.rare ? rareBar : bar).appendChild(b);
       if (A.rare) b.classList.add('rare');
+      if (A.super) b.classList.add('super');
       this.abBtns[A.key] = { b, cd: b.querySelector('.acd'), max: A.cd };
     });
   }
@@ -193,7 +194,7 @@ export class UI {
       o.cd.style.height = (left / o.max) * 100 + '%';
       o.cd.textContent = left > 0 ? Math.ceil(left) : '';
       o.b.classList.toggle('ready', left <= 0);
-      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0) || (k === 'cloak' && p.cloakT > 0) || (k === 'jetpack' && p.jetT > 0) || (k === 'vampire' && p.vampT > 0) || (k === 'rage' && p.rageT > 0) || (k === 'timewarp' && this.g.warpT > 0) || (k === 'snipe' && p.snipeT > 0));
+      o.b.classList.toggle('charged', (k === 'leap' && p.superShot > 0) || (k === 'shield' && p.shieldT > 0) || (k === 'glide' && p.glideT > 0) || (k === 'parry' && p.parryT > 0) || (k === 'cloak' && p.cloakT > 0) || (k === 'jetpack' && p.jetT > 0) || (k === 'vampire' && p.vampT > 0) || (k === 'rage' && p.rageT > 0) || (k === 'timewarp' && this.g.warpT > 0) || (k === 'snipe' && p.snipeT > 0) || (k === 'laser' && p.laserT > 0));
     }
   }
   openShop() { this.renderShop(); $('shop').classList.remove('hidden'); }
@@ -226,7 +227,7 @@ export class UI {
       if (A.rare) return;
       const owned = !!g.save.abil[A.key];
       const row = document.createElement('div');
-      row.className = 'upg ability';
+      row.className = 'upg ability' + (A.super ? ' super' : '');
       row.innerHTML = `<div class="uinfo"><div class="un">${A.icon} ${A.name} <span class="pips">key ${abilityKey(A)} · ${A.cd}s cooldown</span></div><div class="ud">${A.desc}</div></div>`;
       const b = document.createElement('button');
       if (owned && A.key !== 'parry') {

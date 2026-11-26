@@ -181,3 +181,6 @@ body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162
 #scopeFx .scopeX { position: absolute; left: 50%; top: 50%; width: min(68vw, 68vh); height: min(68vw, 68vh); transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid rgba(0,0,0,0.8);
   background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)) center / 100% 2px no-repeat, linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)) center / 2px 100% no-repeat; }
 .ab.snipe { border-color: #ff5a5a; background: rgba(90,10,10,0.6); }
+
+.ab.super { border-color: #ff3a3a; background: linear-gradient(180deg, rgba(140,10,10,0.75), rgba(50,0,0,0.75)); box-shadow: 0 0 12px rgba(255,50,50,0.6); }
+.upg.super { background: rgba(255,40,40,0.16); border: 1px solid rgba(255,80,80,0.4); }
