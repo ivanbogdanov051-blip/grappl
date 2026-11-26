@@ -447,7 +447,7 @@ export class Player {
     if (h.state === HOOK.FLYING) {
       const mul = h.snipe ? 3 : h.super ? 2 : 1;
       const step = s.hookSpeed * mul * dt;
-      const wh = h.snipe ? null : g.world.raycast(h.pos, h.dir, step); // a snipe flies through walls
+      const wh = g.world.raycast(h.pos, h.dir, step);
       const wd = wh ? wh.dist : Infinity;
       if (wh) _c.copy(wh.point);
       const eh = this.safe ? null : g.hitTestEntities(h.pos, h.dir, step, this.id, false);
@@ -474,6 +474,10 @@ export class Player {
         h.snipe = false;
         g.sfx.hit(); g.ui.hitMarker();
         g.particles.burst(h.pos, 0xffffff, 10, 6, 0.15);
+      } else if (wh && h.snipe) {
+        // a snipe can't grab walls: it just fizzles
+        h.pos.copy(_c); h.state = HOOK.RETRACT; h.snipe = false;
+        g.particles.burst(h.pos, 0x8b7b6a, 6, 3, 0.15); g.sfx.cancel(); g.ui.toast('🎯 Snipe hit a wall');
       } else if (wh && h.swap) {
         h.pos.copy(_c); h.state = HOOK.RETRACT; h.swap = false;
       } else if (wh) {

@@ -1444,16 +1444,19 @@ if (location.search.includes("autotest")) {
         const sn = {};
         game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
         reset(); p.yaw += 2; game.save.abil.snipe = true; game.ui.renderAbilities();
-        const e = new Enemy(game, p.pos.clone().add(new THREE.Vector3(0, 0.3, -40)), 'brute'); e.think = 999; e.wdT = 999; game.enemies.push(e); sim(0.2);
+        const e = new Enemy(game, p.pos.clone().add(clearOff(40)), 'brute'); e.think = 999; e.wdT = 999; game.enemies.push(e); sim(0.2);
         const yaw0 = p.yaw;
         sn.used = p.useAbility('snipe'); sim(0.5);
         sn.turned = Math.abs(yaw0 - p.yaw) > 0.5; sn.fov = Math.round(game.camera.fov);
-        // put a wall in the way: force world raycasts to hit, the snipe must ignore them
+        p.shoot(); sim(0.4);
+        sn.dmg = 160 - e.hp; sn.hookState = p.hook.state;
+        // a snipe into a wall must do nothing (no anchor, no pull)
+        p.cancel(); sim(0.5); p.cd = {}; p.useAbility('snipe'); sim(0.2);
         const orc = game.world.raycast.bind(game.world);
         game.world.raycast = (o, d, len) => ({ point: o.clone().addScaledVector(d, Math.min(len, 1)), dist: Math.min(len, 1) });
-        p.shoot(); sim(0.4);
+        p.shoot(); sim(0.1);
         game.world.raycast = orc;
-        sn.dmg = 160 - e.hp; sn.hookState = p.hook.state;
+        sn.wallState = p.hook.state; sn.wallDmg = 160 - e.hp - sn.dmg; sn.armedAfterWall = p.snipeT > 0;
         sim(1); sn.fovAfter = Math.round(game.camera.fov);
         sn.button = !!document.querySelector('#abilities .ab.snipe');
         p.cancel(); sim(0.5);

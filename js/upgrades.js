@@ -38,7 +38,7 @@ export const ABILITIES = [
   { key: 'glide', icon: '🪂', name: 'Glide', cost: 30, cd: 12, desc: 'Fall slowly and steer freely through the air for 6 seconds.' },
   { key: 'bomb', icon: '💣', name: 'Hook Bomb', cost: 55, cd: 7, desc: 'Fire an exploding hook: up to 40 dmg and big knockback in 9 m. Blast yourself for a rocket jump!' },
   { key: 'heal', icon: '💚', name: 'Heal', cost: 35, cd: 20, desc: 'Instantly restore 50 health.' },
-  { key: 'snipe', icon: '🎯', name: 'SNIPE', cost: 200, cd: 10, hk: 'L', desc: 'Zoom in on the closest enemy. Your next shot flies 3× as far and 3× as fast, passes through walls and only hits enemies or players, and deals 2.5× damage.' },
+  { key: 'snipe', icon: '🎯', name: 'SNIPE', cost: 200, cd: 10, hk: 'L', desc: 'Zoom in on the closest enemy. Your next shot flies 3× as far and 3× as fast and deals 2.5× damage, but it only works on enemies or players: if it hits a wall it does nothing.' },
   { key: 'parry', icon: '⚔️', name: 'PARRY', cost: 200, cd: 10, hk: 'R', desc: 'For 2 seconds nothing can hurt you. Anyone who hits you gets launched at you at super speed and takes 50 damage. (You deal no damage while parrying.)' },
   { key: 'fireball', icon: '🔥', name: 'Fireball', cost: 45, cd: 5, hk: 'T', desc: 'Throw a fireball straight where you aim. Explodes for up to 35 dmg in 5 m.' },
   { key: 'frost', icon: '❄️', name: 'Frost Nova', cost: 45, cd: 10, hk: 'Y', desc: 'Freeze everyone within 16 m for 3 s (10 dmg). Frozen enemies can\'t move or shoot. Bosses thaw faster.' },
