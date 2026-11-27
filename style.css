@@ -220,3 +220,13 @@ body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162
 .upg.hookrow.hk-frost .un { color: #9fe0ff; }
 .upg.hookrow.hk-warp .un { color: #c49bff; }
 .hkno { color: #ff9a8a; font-size: 12px; }
+
+/* rare (boss) abilities: small compact icons so they don't cover the screen */
+#rareAbilities { bottom: 96px; gap: 4px; max-width: 90vw; flex-wrap: wrap; justify-content: center; }
+#rareAbilities .ab.rare, body.touch #rareAbilities .ab.rare { width: 34px; height: 34px; border-radius: 9px; border-width: 1.5px; box-shadow: 0 0 5px rgba(255,170,30,0.45); }
+#rareAbilities .ab.rare .ai, body.touch #rareAbilities .ab.rare .ai { font-size: 17px; line-height: 31px; }
+#rareAbilities .ab.rare .ak { font-size: 8px; left: 2px; top: 0; }
+#rareAbilities .ab.rare .acd { font-size: 12px; }
+body.touch #rareAbilities { gap: 3px; max-width: 150px; justify-content: flex-start; }
+#rareAbilities { left: max(10px, env(safe-area-inset-left)); top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; flex-wrap: wrap; max-height: 60vh; max-width: none; align-content: flex-start; }
+body.touch #rareAbilities { top: 162px; transform: none; max-height: calc(100vh - 340px); max-width: none; }
