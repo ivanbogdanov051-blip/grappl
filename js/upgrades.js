@@ -100,7 +100,7 @@ export const PASSIVES = [
 export const PASSIVE = Object.fromEntries(PASSIVES.map((p) => [p.key, p]));
 
 // Grappling hooks: bought with GEMS (+ coins) in the rare black-and-yellow HOOK SHOPS.
-// Gems drop from bosses (10 each) and from players you take out (2).
+// Gems drop from bosses (5 each) and from players you take out (2).
 export const HOOKS = [
   { key: 'normal', icon: '🪝', name: 'Standard Hook', gems: 0, cost: 0, design: 'Steel hook with a blue glow', desc: 'Your trusty hook: grapple onto anything, pull yourself there, yank enemies.' },
   { key: 'grabber', icon: '🟨', name: 'GROUND GRABBER', gems: 10, cost: 2500, design: 'A big striped yellow-and-black claw', desc: 'Rips a chunk out of whatever it hits: dig holes in the ground, tear pieces out of walls, uproot trees and boulders. Click again to THROW it: it STUNS and hurts whoever it hits, smashes through walls and lands as a solid block, so you can wall in your friends or build cover to hide behind. Q drops it in front of you. It can\'t grapple you anywhere.', no: 'Snipe, Swap Shot, Hook Bomb, Super Leap shots, Explosive Hook, Burning Hook, Long Arm, Turbo Pull' },

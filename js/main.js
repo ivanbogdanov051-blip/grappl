@@ -1060,15 +1060,15 @@ class Game {
     const la = e.lastAttacker;
     const drop = e.T.drop ? { k: e.T.drop, at: e.pos.y > KILL_Y + 25 ? e.pos.toArray() : null } : null;
     const fell = e.pos.y <= KILL_Y + 25;
-    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward, drop, e.T.boss && fell ? 10 : 0);
+    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward, drop, e.T.boss && fell ? 5 : 0);
     if (e.T.boss) {
       this.ui.feed(`👑 ${e.name} has fallen!`, 'me');
       if (!fell) {
-        // every boss drops 10 gems where it died (anyone can grab them)
+        // every boss drops 5 gems where it died (anyone can grab them)
         const gy = this.world.groundAt(e.pos.x, e.pos.y + 2, e.pos.z);
         const at = new THREE.Vector3(e.pos.x + 2, gy !== null && e.pos.y - gy < 25 ? gy : e.pos.y, e.pos.z);
-        this.dropCoinBag(at, 10, null, false, 'gem');
-        this.ui.feed('💎 10 gems dropped (follow the cyan beam)', 'me');
+        this.dropCoinBag(at, 5, null, false, 'gem');
+        this.ui.feed('💎 5 gems dropped (follow the cyan beam)', 'me');
       }
     }
   }

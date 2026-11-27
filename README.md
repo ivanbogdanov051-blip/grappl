@@ -59,13 +59,13 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | Splitter | magenta, big | 90 | 40 | Splits into 2 fast Splitlings (22 HP, 15 coins each) when it dies |
 | Medic | light pink | 55 | 50 | Stays back and heals nearby enemies (bosses too). Kill it first! |
 | Kamikaze | bright red, small | 35 | 35 | Dives at you, sparks for 0.7 s, then explodes (9 m). Kill it, freeze it or get away |
-| 👑 **Frost Queen** (boss) | ice-blue giant | 900 | 350 | Freezing hooks, a frost nova that freezes everyone within 24 m, and summons Frostbites. Drops **🌨️ Blizzard** |
-| 👑 **Sky Reaper** (boss) | dark crimson giant | 800 | 350 | Fast; teleports behind you ("is behind you!" warning) and strikes, summons Phantoms. Drops **🗡️ Shadow Step** |
-| 👑 **Inferno Lord** (boss) | orange-red giant | 950 | 350 | Rains meteors on you (red rings, so move!) and leaps across islands to slam down next to you. Drops **☄️ Meteor Storm** |
-| 👑 **Thunder King** (boss) | blue giant | 850 | 300 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
-| 👑 **Void Maw** (boss) | black-purple giant | 1000 | 350 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
-| 👑 **Hive Queen** (boss) | gold giant | 750 | 300 | Exploding hooks and summons Zippers/Bombers. Drops **🐝 Hive Missiles** |
-| **Sky Titan** (boss, drops 🌋 Titan Slam) | giant with a gold crown | 900 | 300 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
+| 👑 **Frost Queen** (boss) | ice-blue giant | 900 | 700 | Freezing hooks, a frost nova that freezes everyone within 24 m, and summons Frostbites. Drops **🌨️ Blizzard** |
+| 👑 **Sky Reaper** (boss) | dark crimson giant | 800 | 700 | Fast; teleports behind you ("is behind you!" warning) and strikes, summons Phantoms. Drops **🗡️ Shadow Step** |
+| 👑 **Inferno Lord** (boss) | orange-red giant | 950 | 700 | Rains meteors on you (red rings, so move!) and leaps across islands to slam down next to you. Drops **☄️ Meteor Storm** |
+| 👑 **Thunder King** (boss) | blue giant | 850 | 600 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
+| 👑 **Void Maw** (boss) | black-purple giant | 1000 | 700 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
+| 👑 **Hive Queen** (boss) | gold giant | 750 | 600 | Exploding hooks and summons Zippers/Bombers. Drops **🐝 Hive Missiles** |
+| **Sky Titan** (boss, drops 🌋 Titan Slam) | giant with a gold crown | 900 | 600 | Can't be knocked around, ground-slams anyone near it, double-damage hooks. Appears about every minute near you, marked by a red light beam and a 👑 BOSS compass arrow |
 
 ## Rules
 
@@ -141,7 +141,7 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 
 ## Gems and grappling hooks
 
-**💎 Gems** drop from every boss (10, follow the cyan beam) and from players you take out online (2). Spend them at the very rare black-and-yellow **HOOK SHOP** (striped roof, "🪝 HOOKS" sign, a giant claw spinning over it). A yellow-black arrow at the top points to the nearest one. Bought hooks are kept forever; switch with Tab / mouse wheel (🪝 button on phones).
+**💎 Gems** drop from every boss (5, follow the cyan beam) and from players you take out online (2). Spend them at the very rare black-and-yellow **HOOK SHOP** (striped roof, "🪝 HOOKS" sign, a giant claw spinning over it). A yellow-black arrow at the top points to the nearest one. Bought hooks are kept forever; switch with Tab / mouse wheel (🪝 button on phones).
 
 | Hook | Cost | Look | What it does |
 |---|---|---|---|

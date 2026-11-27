@@ -260,7 +260,7 @@ export class UI {
     $('shop').classList.toggle('hookshop', hookShop);
     if (hookShop) {
       const h = document.createElement('h3');
-      h.textContent = 'Grappling hooks: paid with 💎 GEMS + coins. Bosses drop 10 gems, players you take out drop 2.';
+      h.textContent = 'Grappling hooks: paid with 💎 GEMS + coins. Bosses drop 5 gems, players you take out drop 2.';
       list.appendChild(h);
       const cur = g.hookKind();
       for (const H of HOOKS) {
