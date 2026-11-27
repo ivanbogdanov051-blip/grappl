@@ -15,7 +15,7 @@ export class Input {
       this.keys[e.code] = true;
       if (!game.running) return;
       if (e.code === 'Space') { this.jumpT = 0.15; e.preventDefault(); }
-      if (e.code === 'KeyQ' || e.code === 'KeyX') game.cancelHook();
+      if (e.code === 'KeyQ') game.cancelHook();
       if (e.code === 'KeyE') game.interact();
       if (e.code === 'KeyF') game.shootHook();
       if (e.code === 'Tab') { e.preventDefault(); game.cycleHook(); }

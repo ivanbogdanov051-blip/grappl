@@ -390,7 +390,12 @@ function populate(I, r) {
       for (let tries = 0; tries < 7; tries++) {
         I.pointAt(r() * TAU, B[4] ? Math.max(0, tMax - 0.12) + r() * 0.12 : r() * tMax, p);
         if (!free(p.x, p.z, fp) || wet(I, p.x, p.z, fp)) continue;
+        // tag everything this builder makes, so STRUCTURE LIFTER can pick the whole building up
+        const n0 = I.boxes.length, n1 = I.decoBoxes.length, n2 = I.deco.length, st = (I.stN = (I.stN || 0) + 1);
         B[0](I, r, p.x, p.z);
+        for (let q = n0; q < I.boxes.length; q++) I.boxes[q].st = st;
+        for (let q = n1; q < I.decoBoxes.length; q++) I.decoBoxes[q].st = st;
+        for (let q = n2; q < I.deco.length; q++) I.deco[q].st = st;
         occ.push({ x: p.x, z: p.z, r: fp });
         break;
       }
@@ -613,6 +618,7 @@ function roofGeo(d) {
 }
 // A loose piece of the world (dug-out ground, a chunk of wall, a boulder, a log), centred on the origin.
 export function pieceGeometry(P) {
+  if (P.parts) return partsGeometry(P.parts);
   const g = new THREE.BoxGeometry(P.sx, P.sy, P.sz);
   g.deleteAttribute('uv');
   const n = g.attributes.position.count, arr = new Float32Array(n * 3), c = new THREE.Color(P.color);
@@ -626,6 +632,25 @@ export function pieceGeometry(P) {
   setSurf(g, P.surf || 0);
   return g;
 }
+// a whole building (lifted with STRUCTURE LIFTER): its boxes and roofs, relative to its centre
+export function partsGeometry(parts) {
+  const sg = parts.map((q) => (q.roof ? roofGeo(q) : boxGeo(q)));
+  if (!sg.length) return new THREE.BufferGeometry();
+  const g = mergeGeometries(sg);
+  sg.forEach((x) => x.dispose());
+  return g;
+}
+// rotate building parts by quarter turns around Y (a thrown building lands turned the way you face)
+export function turnParts(parts, q) {
+  q = ((q % 4) + 4) % 4;
+  return parts.map((p) => {
+    let { x, z, sx, sz } = p;
+    for (let i = 0; i < q; i++) { [x, z] = [z, -x]; [sx, sz] = [sz, sx]; }
+    return { ...p, x, z, sx, sz };
+  });
+}
+// the solid box a roof part collides as
+const roofBox = (q) => ({ x: q.x, y: q.y + q.h * 0.25, z: q.z, sx: q.r * 1.06, sy: q.h * 0.5, sz: q.r * 1.06 });
 
 function waterNormalTex() {
   const S = 128;
@@ -831,7 +856,7 @@ export class World {
     this._near = [];
     this._rc = [];
     this._hit = { point: new THREE.Vector3(), dist: 0, kind: 0 };
-    this.holes = []; this.placed = []; this.holeT = 0;
+    this.holes = []; this.placed = []; this.placedGrps = new Map(); this.holeT = 0;
     this.holeGroup = new THREE.Group(); scene.add(this.holeGroup);
     this.placedGroup = new THREE.Group(); scene.add(this.placedGroup);
   }
@@ -1039,30 +1064,85 @@ export class World {
     return !!hit.type;
   }
   // turn a hit into an op that removes a piece (returns null if nothing can be taken)
-  ripOp(hit, dir) {
+  // o.struct: STRUCTURE LIFTER takes the whole building (or a whole thrown building) instead of a chunk
+  ripOp(hit, dir, o = {}) {
     if (!this.canGrab(hit)) return null;
     const P = hit.point, I = hit.I;
-    if (hit.type === 'ground') return { o: 'dig', I: I.id, x: +P.x.toFixed(2), y: +P.y.toFixed(2), z: +P.z.toFixed(2), r: 2.3 };
+    if (hit.type === 'ground') return { o: 'dig', I: I.id, x: +P.x.toFixed(2), y: +P.y.toFixed(2), z: +P.z.toFixed(2), r: o.r || 3.2 };
     if (hit.type === 'tree') return { o: 'tree', I: I.id, i: I.trees.indexOf(hit.obj) };
     if (hit.type === 'rock') return { o: 'rock', I: I.id, i: I.rocks.indexOf(hit.obj) };
-    if (hit.type === 'placed') return { o: 'unplace', pid: hit.obj.id };
+    if (hit.type === 'placed') return o.struct && hit.obj.grp ? { o: 'unplace', pid: hit.obj.grp.id, all: 1 } : { o: 'unplace', pid: hit.obj.id };
     if (hit.type === 'box') {
-      const b = hit.obj, q = P.clone().addScaledVector(dir, 0.4);
-      return { o: 'cut', I: I.id, b: [b.x, b.y, b.z, b.sx, b.sy, b.sz].map((v) => +v.toFixed(3)), c: [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2), 2.6] };
+      const b = hit.obj;
+      if (o.struct && b.st) return { o: 'lift', I: I.id, st: b.st };
+      const q = P.clone().addScaledVector(dir, 0.5);
+      return { o: 'cut', I: I.id, b: [b.x, b.y, b.z, b.sx, b.sy, b.sz].map((v) => +v.toFixed(3)), c: [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2), o.cut || 3.8] };
     }
     return null;
+  }
+  // STRUCTURE LIFTER: take every box, roof and decoration of building `st` off the island
+  liftStruct(I, st) {
+    const boxes = I.boxes.filter((b) => b.st === st), dboxes = I.decoBoxes.filter((b) => b.st === st);
+    if (!boxes.length) return null;
+    const roofs = [];
+    for (const dd of I.deco) {
+      if (dd.st !== st || dd.gone) continue;
+      dd.gone = true;
+      if (dd._objs) for (const ob of dd._objs) ob.visible = false;
+      if (dd.type === 'roof') roofs.push(dd);
+    }
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const b of boxes) {
+      x0 = Math.min(x0, b.x - b.sx / 2); x1 = Math.max(x1, b.x + b.sx / 2);
+      y0 = Math.min(y0, b.y - b.sy / 2); y1 = Math.max(y1, b.y + b.sy / 2);
+      z0 = Math.min(z0, b.z - b.sz / 2); z1 = Math.max(z1, b.z + b.sz / 2);
+    }
+    for (const r of roofs) y1 = Math.max(y1, r.y + r.h);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+    const rel = (b) => ({ x: b.x - cx, y: b.y - cy, z: b.z - cz, sx: b.sx, sy: b.sy, sz: b.sz, color: b.color, surf: b.surf });
+    const parts = [...boxes.map(rel), ...dboxes.map((b) => ({ ...rel(b), deco: 1 })), ...roofs.map((r) => ({ roof: 1, x: r.x - cx, y: r.y - cy, z: r.z - cz, r: r.r, h: r.h, color: r.color }))];
+    I.boxes = I.boxes.filter((b) => b.st !== st);
+    I.decoBoxes = I.decoBoxes.filter((b) => b.st !== st);
+    this.rebuildStruct(I);
+    let main = boxes[0];
+    for (const b of boxes) if (b.sx * b.sy * b.sz > main.sx * main.sy * main.sz && b.sy > 1) main = b;
+    return { parts, sx: x1 - x0, sy: y1 - y0, sz: z1 - z0, look: 'struct', color: main.color, surf: main.surf, at: [cx, cy, cz] };
   }
   // apply an op; returns the removed piece { sx, sy, sz, look, color, surf } when it removed one
   applyOp(op) {
     if (!op || typeof op !== 'object') return null;
     if (op.o === 'place') return this.place(op), null;
     if (op.o === 'unplace') {
+      if (op.all) {
+        // a whole thrown building
+        const grp = this.placedGrps.get(op.pid);
+        if (!grp) return null;
+        this.removeGrp(grp);
+        let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+        for (const e of grp.parts) {
+          const b = e.vp.roof ? roofBox(e.vp) : e.vp;
+          x0 = Math.min(x0, b.x - b.sx / 2); x1 = Math.max(x1, b.x + b.sx / 2);
+          y0 = Math.min(y0, b.y - b.sy / 2); y1 = Math.max(y1, e.vp.roof ? e.vp.y + e.vp.h : b.y + b.sy / 2);
+          z0 = Math.min(z0, b.z - b.sz / 2); z1 = Math.max(z1, b.z + b.sz / 2);
+        }
+        if (!grp.parts.length) return null;
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+        const parts = grp.parts.map((e) => ({ ...e.vp, x: e.vp.x - cx, y: e.vp.y - cy, z: e.vp.z - cz }));
+        return { parts, sx: x1 - x0, sy: y1 - y0, sz: z1 - z0, look: 'struct', color: grp.color, surf: grp.surf, at: [grp.x + cx, grp.y + cy, grp.z + cz] };
+      }
       const i = this.placed.findIndex((b) => b.id === op.pid);
       if (i < 0) return null;
       const b = this.placed[i];
       this.placed.splice(i, 1);
-      this.placedGroup.remove(b.mesh); b.mesh.geometry.dispose();
-      return { sx: b.sx, sy: b.sy, sz: b.sz, look: b.look, color: b.color, surf: b.surf };
+      if (b.grp) this.dropFromGrp(b);
+      else { this.placedGroup.remove(b.mesh); b.mesh.geometry.dispose(); }
+      return { sx: b.sx, sy: b.sy, sz: b.sz, look: b.look === 'struct' ? 'box' : b.look, color: b.color, surf: b.surf };
+    }
+    if (op.o === 'lift') {
+      const I = this.islandById(op.I);
+      if (!I) return null;
+      this.getData(...String(op.I).split('_').slice(0, 2).map(Number)).modded = true;
+      return this.liftStruct(I, op.st);
     }
     const I = this.islandById(op.I);
     if (!I) return null;
@@ -1077,7 +1157,8 @@ export class World {
       if (this.holes.length > 400) { const old = this.holes.shift(); old.I.holes.splice(old.I.holes.indexOf(old), 1); this.holeGroup.remove(old.mesh); }
       this.holeT = 0;
       const rock = I.kind === 'rock';
-      return { sx: 1.9, sy: 1.9, sz: 1.9, look: rock ? 'rock' : 'dirt', color: rock ? 0x6f655c : 0x6e5136, surf: 0 };
+      const ps = Math.min(3, h.r * 0.84);
+      return { sx: ps, sy: ps * 0.9, sz: ps, look: rock ? 'rock' : 'dirt', color: rock ? 0x6f655c : 0x6e5136, surf: 0 };
     }
     if (op.o === 'tree') {
       const t = I.trees[op.i];
@@ -1085,21 +1166,21 @@ export class World {
       t.gone = true;
       if (t._tm) { t._tm.setMatrixAt(t._ti, _zero); t._tm.instanceMatrix.needsUpdate = true; }
       if (t._lm) { for (let k = 0; k < 3; k++) t._lm.setMatrixAt(t._li + k, _zero); t._lm.instanceMatrix.needsUpdate = true; }
-      return { sx: 0.9, sy: 0.9, sz: Math.min(6, t.h * 0.75), look: 'log', color: 0x5b3e27, surf: 2 };
+      return { sx: 1.1, sy: 1.1, sz: Math.min(7, t.h * 0.8), look: 'log', color: 0x5b3e27, surf: 2 };
     }
     if (op.o === 'rock') {
       const b = I.rocks[op.i];
       if (!b || b.gone) return null;
       b.gone = true;
       if (b._rm) { b._rm.setMatrixAt(b._ri, _zero); b._rm.instanceMatrix.needsUpdate = true; }
-      const s = Math.min(2.6, b.s * 1.4);
+      const s = Math.min(3.2, Math.max(1.4, b.s * 1.6));
       return { sx: s, sy: s * 0.8, sz: s, look: 'rock', color: 0x7c7770, surf: 0 };
     }
     if (op.o === 'cut') {
       const [bx, by, bz, bsx, bsy, bsz] = op.b || [], [qx, qy, qz, qs] = op.c || [];
       const bi = I.boxes.findIndex((b) => near(b.x, bx) && near(b.y, by) && near(b.z, bz) && near(b.sx, bsx) && near(b.sy, bsy) && near(b.sz, bsz));
       if (bi < 0 || !isFinite(qs)) return null;
-      const h = Math.min(3, qs) / 2;
+      const h = Math.min(5, qs) / 2;
       const res = subtractBox(I.boxes[bi], qx - h, qx + h, qy - h, qy + h, qz - h, qz + h);
       if (!res) return null;
       I.boxes.splice(bi, 1, ...res.rest);
@@ -1113,15 +1194,70 @@ export class World {
   }
   // a thrown piece came to rest: it becomes a solid block
   place(op) {
-    if (this.placed.some((b) => b.id === op.pid)) return;
-    const b = { id: op.pid, x: +op.x, y: +op.y, z: +op.z, sx: Math.min(8, +op.sx), sy: Math.min(8, +op.sy), sz: Math.min(8, +op.sz), look: op.look, color: op.color | 0, surf: op.surf | 0 };
-    if (![b.x, b.y, b.z, b.sx, b.sy, b.sz].every(isFinite)) return;
+    if (this.placed.some((b) => b.id === op.pid) || this.placedGrps.has(op.pid)) return;
+    const x = +op.x, y = +op.y, z = +op.z;
+    if (![x, y, z].every(isFinite)) return;
+    if (Array.isArray(op.parts)) return this.placeGrp(op, x, y, z);
+    const b = { id: op.pid, x, y, z, sx: Math.min(8, +op.sx), sy: Math.min(8, +op.sy), sz: Math.min(8, +op.sz), look: String(op.look || 'box'), color: op.color | 0, surf: op.surf | 0 };
+    if (![b.sx, b.sy, b.sz].every((v) => v > 0)) return;
     b.I = this.islandUnder({ x: b.x, y: b.y - b.sy / 2, z: b.z }) || null;
-    const m = new THREE.Mesh(pieceGeometry(b), this.mats.struct);
+    const m = new THREE.Mesh(pieceGeometry(b), b.look === 'ice' ? this.iceMat() : this.mats.struct);
     m.position.set(b.x, b.y, b.z); m.castShadow = this.shadows; m.receiveShadow = true;
     this.placedGroup.add(m); b.mesh = m;
     this.placed.push(b);
-    if (this.placed.length > 150) { const old = this.placed.shift(); this.placedGroup.remove(old.mesh); old.mesh.geometry.dispose(); }
+    this.trimPlaced();
+  }
+  iceMat() {
+    return this.mats.ice || (this.mats.ice = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.78, emissive: 0x2a6f9a, emissiveIntensity: 0.35 }));
+  }
+  // a thrown building: one solid box per part, drawn as one mesh
+  placeGrp(op, x, y, z) {
+    const n = (v) => (isFinite(v) ? +v : 0);
+    const grp = { id: op.pid, x, y, z, parts: [], mesh: null, color: op.color | 0, surf: op.surf | 0 };
+    for (const q of op.parts.slice(0, 160)) {
+      if (!q || typeof q !== 'object') continue;
+      const vp = q.roof
+        ? { roof: 1, x: n(q.x), y: n(q.y), z: n(q.z), r: Math.min(20, Math.abs(n(q.r))), h: Math.min(12, Math.abs(n(q.h))), color: q.color | 0 }
+        : { x: n(q.x), y: n(q.y), z: n(q.z), sx: Math.min(30, Math.abs(n(q.sx))), sy: Math.min(30, Math.abs(n(q.sy))), sz: Math.min(30, Math.abs(n(q.sz))), color: q.color | 0, surf: q.surf | 0, deco: q.deco ? 1 : 0 };
+      if (Math.max(Math.abs(vp.x), Math.abs(vp.y), Math.abs(vp.z)) > 40) continue;
+      const k = grp.parts.length;
+      const cb = vp.roof ? roofBox(vp) : vp;
+      const e = { id: op.pid + '.' + k, grp, vp, x: x + cb.x, y: y + cb.y, z: z + cb.z, sx: cb.sx, sy: cb.sy, sz: cb.sz, look: 'struct', color: vp.color, surf: vp.roof ? 3 : vp.surf };
+      if (!(e.sx > 0 && e.sy > 0 && e.sz > 0)) continue;
+      grp.parts.push(e);
+      if (!vp.deco) this.placed.push(e);
+    }
+    if (!grp.parts.length) return;
+    const I = this.islandUnder({ x, y: y - 1, z }) || null;
+    for (const e of grp.parts) e.I = I;
+    this.placedGrps.set(grp.id, grp);
+    this.grpMesh(grp);
+    this.trimPlaced();
+  }
+  grpMesh(grp) {
+    if (grp.mesh) { this.placedGroup.remove(grp.mesh); grp.mesh.geometry.dispose(); }
+    const m = new THREE.Mesh(partsGeometry(grp.parts.map((e) => e.vp)), this.mats.struct);
+    m.position.set(grp.x, grp.y, grp.z); m.castShadow = this.shadows; m.receiveShadow = true;
+    this.placedGroup.add(m); grp.mesh = m;
+  }
+  removeGrp(grp) {
+    this.placed = this.placed.filter((b) => b.grp !== grp);
+    if (grp.mesh) { this.placedGroup.remove(grp.mesh); grp.mesh.geometry.dispose(); grp.mesh = null; }
+    this.placedGrps.delete(grp.id);
+  }
+  // one part of a thrown building got ripped out
+  dropFromGrp(b) {
+    const grp = b.grp;
+    grp.parts.splice(grp.parts.indexOf(b), 1);
+    if (!grp.parts.some((e) => !e.vp.deco)) { this.removeGrp(grp); return; }
+    this.grpMesh(grp);
+  }
+  trimPlaced() {
+    while (this.placed.length > 700) {
+      const old = this.placed[0];
+      if (old.grp) { this.removeGrp(old.grp); continue; }
+      this.placed.shift(); this.placedGroup.remove(old.mesh); old.mesh.geometry.dispose();
+    }
   }
   // highest surface under a footprint (terrain, structures, placed blocks), or null over the void
   supportY(x, z, yMax, hx, hz, ignore) {
@@ -1157,7 +1293,7 @@ export class World {
     for (const I of islands) {
       for (const b of I.boxes) sg.push(boxGeo(b));
       for (const b of I.decoBoxes) sg.push(boxGeo(b));
-      for (const dd of I.deco) if (dd.type === 'roof') sg.push(roofGeo(dd));
+      for (const dd of I.deco) if (dd.type === 'roof' && !dd.gone) sg.push(roofGeo(dd));
     }
     if (!sg.length) return null;
     const g = mergeGeometries(sg);
@@ -1356,6 +1492,8 @@ export class World {
     // structures (one merged mesh per chunk, rebuilt when the Ground Grabber rips a piece out)
     for (const I of islands) {
       for (const dd of I.deco) {
+        if (dd.gone) continue;
+        const n0 = group.children.length;
         if (dd.type === 'crystal') {
           const c = new THREE.Mesh(GE.crystal, M.crystal);
           c.scale.set(dd.s, dd.s * 1.6, dd.s);
@@ -1382,6 +1520,7 @@ export class World {
           rot.userData = { axis: 'y', speed: 0.8 };
           group.add(rot); spinners.push(rot);
         }
+        dd._objs = group.children.slice(n0); // hidden if the building gets lifted away
       }
     }
     const sgeo = this.structGeometry(islands);

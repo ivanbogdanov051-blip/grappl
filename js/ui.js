@@ -81,15 +81,19 @@ export class UI {
     const b = $('btnShoot');
     const pull = st === 2 || st === 3;
     const light = kind === 'lightrope', grab = kind === 'grabber';
-    b.textContent = held ? 'THROW' : pull ? (st === 3 ? 'YANK' : 'PULL') : st === 1 || st === 4 ? '• • •' : grab ? 'GRAB' : 'SHOOT';
-    b.classList.toggle('pull', pull || held);
-    b.classList.toggle('busy', !held && (st === 1 || st === 4));
+    const live = st === 1 && (kind === 'frost' || kind === 'boomerang'); // a second tap does something while it flies
+    b.textContent = held ? 'THROW' : pull ? (st === 3 ? 'YANK' : 'PULL') : live ? (kind === 'frost' ? 'ICE' : 'CALL') : st === 1 || st === 4 ? '• • •' : grab ? 'GRAB' : kind === 'boomerang' ? 'THROW' : kind === 'warp' ? 'WARP' : 'SHOOT';
+    b.classList.toggle('pull', pull || held || live);
+    b.classList.toggle('busy', !held && !live && (st === 1 || st === 4));
     $('btnCancel').classList.toggle('hidden', !(st === 1 || pull || held));
     const T = this.touch;
     let tip = ['', 'Hook flying…', T ? 'Hooked! Tap PULL to launch · ✕ to cancel' : 'Hooked! Click to PULL · Right-click / Q to cancel', T ? 'Got one! Tap YANK to pull them in' : 'Got one! Click to YANK them · Q to let go', ''][st] || '';
     if (light && st === 2) tip = T ? '🪢 Swinging on the rope · PULL to zoom in · ✕ lets go' : '🪢 Swing on the rope! Click to PULL yourself in · Q lets go';
     if (light && st === 3) tip = T ? '🪢 Tied up! YANK to drag them in · ✕ lets go' : '🪢 They\'re tied to you! Click to YANK · Q lets go';
-    if (held) tip = T ? '🟨 Holding a chunk · THROW it · ✕ puts it down' : '🟨 Holding a chunk · Click to THROW · Q to put it down';
+    if (kind === 'boomerang' && st === 1) tip = T ? '🪃 Boomerang out! Tap CALL to bring it back' : '🪃 Boomerang out! Click to call it back early';
+    if (kind === 'frost' && st === 1) tip = T ? '❄️ Tap ICE to freeze a platform right there' : '❄️ Click again to freeze an ICE PLATFORM right there';
+    const what = held === 'struct' ? '🏗️ Holding a whole building' : '🟨 Holding a chunk';
+    if (held) tip = T ? `${what} · THROW it · ✕ puts it down` : `${what} · Click to THROW (the arc shows where it lands) · Q to put it down`;
     $('hookState').textContent = tip;
     $('hookState').classList.toggle('pull', pull || held);
   }

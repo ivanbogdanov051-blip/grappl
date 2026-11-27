@@ -62,6 +62,8 @@ Enemies walk, chase you, grapple between islands, **hook-pull** you to them, and
 | 👑 **Frost Queen** (boss) | ice-blue giant | 900 | 700 | Freezing hooks, a frost nova that freezes everyone within 24 m, and summons Frostbites. Drops **🌨️ Blizzard** |
 | 👑 **Sky Reaper** (boss) | dark crimson giant | 800 | 700 | Fast; teleports behind you ("is behind you!" warning) and strikes, summons Phantoms. Drops **🗡️ Shadow Step** |
 | 👑 **Inferno Lord** (boss) | orange-red giant | 950 | 700 | Rains meteors on you (red rings, so move!) and leaps across islands to slam down next to you. Drops **☄️ Meteor Storm** |
+| 👑 **Stone Colossus** (boss) | huge brown-grey giant | 1100 | 700 | Rips boulders out of the island and hurls them at you (they stun for 1.6 s; every third throw is a volley of three), stomps when you get close and leaves holes everywhere. Drops **🪨 Boulder Toss** |
+| 👑 **The Warden** (boss) | slate-blue giant | 950 | 700 | Locks you in stone cages (rip them open with the Ground Grabber, or wait 10 s) and chains you to itself so you can't get more than ~12 m away for 4 s. Drops **⛓️ Stone Cage** |
 | 👑 **Thunder King** (boss) | blue giant | 850 | 600 | Calls lightning on every player near it (red warning rings, so move!). Drops **⚡ Thunder Strike** |
 | 👑 **Void Maw** (boss) | black-purple giant | 1000 | 700 | Gravity pulses suck all nearby players in. Drops **🌀 Black Hole** |
 | 👑 **Hive Queen** (boss) | gold giant | 750 | 600 | Exploding hooks and summons Zippers/Bombers. Drops **🐝 Hive Missiles** |
@@ -138,6 +140,7 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | 🩸 Bloodlust | 2000 | Every kill heals 30 HP |
 | 🏆 Bounty Hunter | 2500 | +25 coins per kill (+150 for bosses) |
 | 💢 Adrenaline | 3000 | Below 30% health: 40% faster and 50% more damage |
+| 🏗️ **Structure Lifter** | 5000 | GROUND GRABBER upgrade: grabbing a building rips out the WHOLE structure (house, tower, windmill, castle…) in one go. Throw it: 60 damage and a 3 s stun to everyone it hits, and it lands as a solid building. Grab a thrown building again to pick the whole thing back up |
 
 ## Gems and grappling hooks
 
@@ -146,8 +149,11 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | Hook | Cost | Look | What it does |
 |---|---|---|---|
 | 🪝 Standard Hook | free | steel hook, blue glow | grapple, pull, yank |
-| 🟨 **GROUND GRABBER** | 💎 10 + 🪙 2500 | big striped yellow-and-black claw | Rips a chunk out of whatever it hits: digs holes in the ground, tears pieces out of walls, uproots trees and boulders, picks up blocks. Click again to **throw** it: it **stuns** (2.2 s) and hurts whoever it hits, smashes through walls and lands as a solid block, so you can wall in your friends or build cover. Q puts it down in front of you. Its claw also stuns people it hits. It can't grapple you anywhere, and Snipe, Swap Shot, Hook Bomb, Super Leap shots, Explosive Hook, Burning Hook, Long Arm and Turbo Pull don't work with it. Nothing can be ripped out of the safe zone or shops. |
+| 🟨 **GROUND GRABBER** | 💎 10 + 🪙 2500 | big striped yellow-and-black claw | Rips a big chunk out of whatever it hits (3.2 m holes, 3.8 m wall pieces): digs holes in the ground, tears pieces out of walls, uproots trees and boulders, picks up blocks. Click again to **throw** it: a yellow dotted arc and a ghost box show exactly where it will land. It **stuns** (2.2 s) and hurts whoever it hits, smashes through walls and lands as a solid block, so you can wall in your friends or build cover. Q puts it down in front of you. The crosshair turns yellow over things you can grab and red over things that won't come loose. With the **Structure Lifter** passive it picks up whole buildings. Its claw also stuns people it hits. It can't grapple you anywhere, and Snipe, Swap Shot, Hook Bomb, Super Leap shots, Explosive Hook, Burning Hook, Long Arm and Turbo Pull don't work with it. Nothing can be ripped out of the safe zone or shops. |
 | 🪢 **LIGHTROPE HOOK** | 💎 5 + 🪙 3500 | small grey hook, black prongs, thin loose rope | The rope is loose and holds on to anything until you **pull**. Hook a wall and swing like a pendulum. Hook an enemy or a player and they are tied to you: they can't get further away than the rope (a boss is too heavy and drags you instead). Click to pull: you zoom to the wall, or you yank them in and keep them on a short 4.5 m leash. Q lets go. Snipe doesn't work with it. |
+| 🪃 **BOOMERANG HOOK** | 💎 4 + 🪙 2000 | spinning orange-and-white curved blade | Thrown, not fired: it curves out and comes back to you, slicing through every enemy and player in its way (each one hit once, 1.1× hook damage). It scoops up coins and coin or gem bags and brings them back to you. Click to call it back early. It can't grapple you anywhere; Snipe, Swap Shot, Hook Bomb, Super Leap shots and Explosive Hook don't work with it. |
+| ❄️ **FROST HOOK** | 💎 6 + 🪙 3000 | icy blue crystal hook, frosted rope | Grapples like the Standard Hook, but whoever it hits is **frozen** for 2.5 s. Click again while it's still flying and it freezes right there into a 4 × 4 m **ice platform** you can stand on, and you stay hooked to it so you can pull yourself over. You can have 4 platforms at once and each one melts after 30 s. Snipe doesn't work with it. |
+| 🌀 **WARP HOOK** | 💎 8 + 🪙 4500 | purple ring with a glowing cyan portal | No pulling: wherever it lands you **teleport** there instantly and keep your speed. If it hits an enemy or a player, you **swap places** (they're stunned for 1 s; bosses are too heavy, so you land behind them). 1 s recharge. Snipe, Swap Shot and Super Leap shots don't work with it. |
 
 Everything the Ground Grabber changes (holes, ripped walls, thrown blocks) is shared with everyone in the room, including players who join later.
 
@@ -172,6 +178,8 @@ Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock
 | [ | 🌨️ Blizzard: freezes and damages everyone within 22 m for 4 s | 18 s | Frost Queen |
 | ] | 🗡️ Shadow Step: teleport behind an enemy and backstab it for 60 | 8 s | Sky Reaper |
 | Z | ☄️ Meteor Storm: 7 meteors rain down where you aim, 30 damage each | 16 s | Inferno Lord |
+| X | 🪨 Boulder Toss: rip a boulder out of the ground and hurl it where you aim, up to 45 damage and a 2 s stun; it lands as a block | 9 s | Stone Colossus |
+| \\ | ⛓️ Stone Cage: lock the enemy you aim at (or the nearest within 50 m) in a stone cage for 10 s | 16 s | The Warden |
 
 ## Multiplayer
 

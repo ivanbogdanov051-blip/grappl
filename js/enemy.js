@@ -223,6 +223,20 @@ export class Enemy {
       if (T.special === 'heal' && this.specialCool <= 0 && g.enemyHeal(this)) this.specialCool = T.specialCd;
       if (T.special === 'boom' && d < 6.5 && this.fuseT <= 0) { this.fuseT = 0.7; g.sfx.near('cancel', me); }
       if (T.special === 'boom' && this.fuseT <= 0 && this.specialCool <= 0 && d > 7 && d < 40 && vis) { this.specialCool = 3.5; this.pounce(tg, 34, 4); return; }
+      if (T.bossKind === 'colossus') {
+        if (this.slamCool <= 0 && d < 16) { this.slamCool = 5 + Math.random() * 2; g.bossSlam(this); return; }
+        if (this.specialCool <= 0 && d > 8 && d < 100 && vis) {
+          // rip a boulder out of the island and hurl it (every third throw is a volley of three)
+          this.specialCool = 3.6 + Math.random() * 1.4; this.tossN = (this.tossN || 0) + 1;
+          g.bossToss(this, tg, this.tossN % 3 === 0 ? 3 : 1);
+          return;
+        }
+      }
+      if (T.bossKind === 'warden' && this.specialCool <= 0 && d < 70) {
+        this.specialCool = 5 + Math.random() * 1.5; this.wardN = (this.wardN || 0) + 1;
+        if (this.wardN % 2 && vis && tg.ground) { if (g.cage(this, tg)) { g.ui.toast(`⛓️ ${T.name} locked you in a cage!`); return; } }
+        if (h.state === HOOK.IDLE && vis) { this.shoot(this.aimAt(tg), 'leash'); return; }
+      }
       if (T.bossKind === 'titan' && this.slamCool <= 0 && d < 17) { this.slamCool = 5 + Math.random() * 3; g.bossSlam(this); return; }
       if (T.bossKind === 'thunder' && this.specialCool <= 0 && d < 90) { this.specialCool = 4.5; g.enemyLightning(this, tg); return; }
       if (T.bossKind === 'void' && this.specialCool <= 0 && d < 45) { this.specialCool = 7; this.pulseN = 3; this.pulseT = 0; }
@@ -421,7 +435,16 @@ export class Enemy {
       h.t += dt;
       const tg = g.getEntity(h.target);
       if (tg) { h.pos.copy(tg.pos); h.pos.y += 0.7; }
-      if (h.t > 0.35 || !tg) h.state = HOOK.RETRACT;
+      if (h.mode === 'leash' && tg && !tg.dead && h.t < h.leash) {
+        this.leashT = (this.leashT || 0) - dt;
+        if (this.leashT <= 0) {
+          this.leashT = 0.1;
+          this.center(_c);
+          // the chain reels you in to a few metres, then holds you there
+          const L = Math.max(4 + this.scale, (h.L0 || 12) - 9 * h.t);
+          g.deliverHit(tg.id, { mode: 'tether', a: [_c.x, _c.y - 0.6 * this.scale, _c.z], L, attacker: this.id, aname: this.name });
+        }
+      } else if (h.t > 0.35 || !tg) h.state = HOOK.RETRACT;
     } else if (h.state === HOOK.RETRACT) {
       this.handPos(_b);
       _a.subVectors(_b, h.pos);
@@ -437,6 +460,10 @@ export class Enemy {
     if (h.mode === 'pull') {
       _a.copy(this.pos); _a.y += 1.2;
       g.deliverHit(ent.id, { mode: 'pull', dmg: Math.round(10 * this.T.dmg), a: _a.toArray(), attacker: this.id, aname: this.name, freeze: this.T.freeze || 0 });
+    } else if (h.mode === 'leash') {
+      // THE WARDEN: a chain that keeps you within a few metres of it for 4 s
+      g.deliverHit(ent.id, { mode: 'latch', dmg: Math.round(8 * this.T.dmg), attacker: this.id, aname: this.name });
+      h.leash = 4; h.L0 = Math.max(6, ent.pos.distanceTo(this.pos));
     } else if (h.mode === 'swap') {
       const mine = this.pos.clone(); mine.y += 0.5;
       const theirs = ent.pos.clone(); theirs.y += 1;
@@ -456,6 +483,10 @@ export class Enemy {
       return;
     }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
+    if (hit.mode === 'tp' && !this.T.boss && Array.isArray(hit.b) && hit.b.every(isFinite)) {
+      this.center(_a); this.game.particles.burst(_a, 0x9b6bff, 16, 6, 0.2);
+      this.pos.fromArray(hit.b); this.vel.set(0, 0, 0); this.moveTarget = null; this.hook.state = HOOK.IDLE; this.wdPos.copy(this.pos);
+    }
     this.hp -= hit.dmg || 0;
     this.model.hit();
     this.cool = Math.min(this.cool, 0.6);

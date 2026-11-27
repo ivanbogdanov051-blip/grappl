@@ -100,6 +100,18 @@ export const ENEMY_TYPES = {
     hookSpeed: 120, range: 140, cool: [1.8, 3], dmg: 1.8, bumpDmg: 24, bumpK: 2.4,
     w: { pull: 0.5, swap: 0.2, approach: 0.3 }, boss: true, bossKind: 'inferno', drop: 'meteor', spawn: 0,
   },
+  // rips boulders out of the island and hurls them (they stun), stomps the ground when you get close
+  colossus: {
+    name: 'STONE COLOSSUS', color: 0x6b5a48, scale: 3.8, hp: 1100, reward: 700, walk: 3.5, run: 8,
+    hookSpeed: 110, range: 130, cool: [2.2, 3.6], dmg: 2, bumpDmg: 30, bumpK: 3,
+    w: { pull: 0.5, swap: 0.1, approach: 0.4 }, boss: true, bossKind: 'colossus', drop: 'boulder', spawn: 0,
+  },
+  // locks you in stone cages and drags you around on a chain
+  warden: {
+    name: 'THE WARDEN', color: 0x3d4a5c, scale: 3, hp: 950, reward: 700, walk: 4.5, run: 10,
+    hookSpeed: 130, range: 140, cool: [1.8, 3], dmg: 1.6, bumpDmg: 24, bumpK: 2.4,
+    w: { pull: 0.55, swap: 0.15, approach: 0.3 }, boss: true, bossKind: 'warden', drop: 'cage', spawn: 0,
+  },
 };
 export const ENEMY_KEYS = Object.keys(ENEMY_TYPES);
 export const BOSS_KEYS = ENEMY_KEYS.filter((k) => ENEMY_TYPES[k].boss);

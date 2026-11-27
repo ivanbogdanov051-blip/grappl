@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Grass, Dust, HOLES } from './realism.js';
 import { World, SPAWN, CHUNK, KILL_Y, inSafeZone } from './world.js';
-import { Player, HOOK } from './player.js';
+import { Player, HOOK, MODE_HOOK } from './player.js';
 import { Enemy } from './enemy.js';
 import { Remote } from './remote.js';
 import { Net } from './net.js';
@@ -29,8 +29,8 @@ const TAU = Math.PI * 2;
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const SAVE_KEY = 'skygrapple_save_v1';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3();
-const HOOK_KINDS = ['normal', 'grabber', 'lightrope'];
-const ROPE_STYLE = { normal: [0x23262b, 0.03], grab: [0x1a1a1a, 0.055], light: [0xcfd3d8, 0.016] };
+const HOOK_KINDS = ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp'];
+const ROPE_STYLE = { normal: [0x23262b, 0.03], grab: [0x1a1a1a, 0.055], light: [0xcfd3d8, 0.016], frost: [0x9fe0ff, 0.026], warp: [0x9b6bff, 0.014] };
 
 function loadSave() {
   const def = { name: '', coins: 0, up: {}, abil: {}, quality: isTouch ? 'low' : 'high' };
@@ -88,7 +88,7 @@ class Game {
     this.grab = new Grab(this);
     this.editLog = []; this.editSeen = new Set();
     this.camDip = 0; this.stepT = 0;
-    this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.dots = []; this.bags = []; this.decoys = []; this.warpT = 0;
+    this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.dots = []; this.bags = []; this.decoys = []; this.warpT = 0; this.timedOps = [];
     this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), mine: new THREE.CylinderGeometry(0.55, 0.65, 0.22, 16), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
     this.sfx = new Sfx();
     this.ui = new UI(this, isTouch);
@@ -166,7 +166,7 @@ class Game {
     this.gun.group.scale.setScalar(0.72);
     this.gunScene.add(this.gun.group);
     this.hookMeshes = {};
-    for (const [k, sc] of [['normal', 2.2], ['grabber', 3.4], ['lightrope', 1.6]]) {
+    for (const [k, sc] of [['normal', 2.2], ['grabber', 3.4], ['lightrope', 1.6], ['boomerang', 4.2], ['frost', 2.4], ['warp', 3]]) {
       const m = makeHookHead(k); m.scale.setScalar(sc); m.visible = false;
       this.scene.add(m); this.hookMeshes[k] = m;
     }
@@ -818,7 +818,7 @@ class Game {
       const b = this.bags[i];
       b.t -= dt;
       b.g.children[0].rotation.y += dt;
-      b.g.position.y = b.pos.y + Math.abs(Math.sin(this.time * 3)) * 0.25;
+      b.g.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(this.time * 3)) * 0.25, b.pos.z);
       const reach = p.has('coinmagnet') ? 12 : 2.6;
       if (!p.dead && p.pos.distanceTo(b.pos) < reach) {
         if (b.kind === 'gem') { this.addGems(b.n); this.ui.toast(`💎 Picked up ${b.n} gems! Spend them at a HOOK SHOP`); }
@@ -892,6 +892,104 @@ class Game {
         L.gem.material.dispose(); L.beam.material.dispose();
         this.loot.splice(i, 1);
       }
+    }
+  }
+  // ---- round 9: Stone Colossus, The Warden, Boulder Toss, Stone Cage, Frost Hook ice
+  // STONE COLOSSUS: tears boulders out of the ground at its feet and hurls them (they stun)
+  bossToss(e, tg, n = 1) {
+    const W = this.world;
+    for (let k = 0; k < n; k++) {
+      _w.subVectors(tg.pos, e.pos).setY(0);
+      if (_w.lengthSq() < 1e-4) _w.set(0, 0, 1);
+      _w.normalize();
+      const a = (k - (n - 1) / 2) * 0.9;
+      const fx = Math.cos(a) * _w.x - Math.sin(a) * _w.z, fz = Math.sin(a) * _w.x + Math.cos(a) * _w.z;
+      const x = e.pos.x + fx * (e.radius + 3), z = e.pos.z + fz * (e.radius + 3);
+      const gy = W.groundAt(x, e.pos.y + 2, z);
+      let size = 2.4;
+      if (gy !== null && Math.abs(gy - e.pos.y) < 4 && !inSafeZone({ x, y: gy, z })) {
+        const I = W.islandUnder({ x, y: gy - 0.3, z });
+        if (I && I.kind !== 'spawn') { const P = this.edit({ o: 'dig', I: I.id, x: +x.toFixed(2), y: +gy.toFixed(2), z: +z.toFixed(2), r: 2.6 }); if (P) size = P.sx; }
+        _x.set(x, gy + 0.3, z); this.particles.burst(_x, 0x6e5136, 20, 8, 0.35);
+      }
+      const from = new THREE.Vector3(e.pos.x + fx * 1.2, e.pos.y + e.height + 1.5, e.pos.z + fz * 1.2);
+      const to = tg.pos.clone(); to.y += 0.6;
+      const lead = from.distanceTo(to) / 42;
+      to.addScaledVector(tg.vel, lead * 0.6);
+      to.x += (k - (n - 1) / 2) * 5; to.z += (Math.random() - 0.5) * 3;
+      this.grab.toss(e, from, to, { sx: size, sy: size * 0.9, sz: size }, { dmg: 30, stun: 1.6, color: 0x6f655c });
+    }
+    this.sfx.near('thunk', e.pos); this.sfx.near('zip', e.pos);
+    const d = e.pos.distanceTo(this.player.pos);
+    if (d < 60) this.shake(0.4 * (1 - d / 60));
+  }
+  // the Colossus' rare ability: rip a boulder out and throw it at the crosshair
+  boulderToss(p) {
+    const W = this.world;
+    const f = p.forward(new THREE.Vector3());
+    // the boulder comes out of the ground a few steps ahead (not under your own feet)
+    const fl = Math.hypot(f.x, f.z) || 1;
+    _x.set(p.pos.x + (f.x / fl) * 4.6, p.pos.y, p.pos.z + (f.z / fl) * 4.6);
+    const gy = W.groundAt(_x.x, p.pos.y + 1.5, _x.z);
+    if (gy !== null && p.pos.y - gy < 3 && !inSafeZone(_x)) {
+      const I = W.islandUnder({ x: _x.x, y: gy - 0.3, z: _x.z });
+      if (I && I.kind !== 'spawn') this.edit({ o: 'dig', I: I.id, x: +_x.x.toFixed(2), y: +gy.toFixed(2), z: +_x.z.toFixed(2), r: 2.3 });
+      _x.y = gy + 0.3; this.particles.burst(_x, 0x6e5136, 24, 9, 0.35);
+    }
+    const from = this.camera.position.clone(); from.y += 1.2; from.addScaledVector(f, 1.5);
+    const wh = W.raycast(this.camera.position, f, 110);
+    let dist = wh ? wh.dist : 110;
+    const eh = this.hitTestEntities(this.camera.position, f, dist, p.id, false);
+    if (eh) dist = eh.dist;
+    const to = this.camera.position.clone().addScaledVector(f, dist);
+    this.grab.toss(p, from, to, { sx: 2.8, sy: 2.5, sz: 2.8 }, { speed: 60, dmg: 45, stun: 2, color: 0x7c7770 });
+    this.sfx.zip(); this.shake(0.3); this.recoil = 1.4;
+  }
+  // a stone cage around someone: 4 walls and a lid, made of placed blocks that crumble after 10 s
+  cage(owner, tg, secs = 10) {
+    if (!tg || tg.dead || inSafeZone(tg.pos)) return false;
+    const sc = tg.scale || 1;
+    const gy = this.world.groundAt(tg.pos.x, tg.pos.y + 1, tg.pos.z);
+    const base = gy !== null && tg.pos.y - gy < 4 ? gy : tg.pos.y;
+    const R = 0.6 * sc + 1.1, H = 1.45 * sc + 1.6, T = 0.6, L = 2 * R + T;
+    const cx = tg.pos.x, cz = tg.pos.z;
+    const walls = [[cx - R, cz, T, L], [cx + R, cz, T, L], [cx, cz - R, L, T], [cx, cz + R, L, T]];
+    const pids = [];
+    const id = this.sid + '-cg' + (this.cageN = (this.cageN || 0) + 1);
+    const put = (x, y, z, sx, sy, sz, k) => {
+      const pid = id + '-' + k;
+      this.edit({ o: 'place', pid, x: +x.toFixed(2), y: +y.toFixed(2), z: +z.toFixed(2), sx: +sx.toFixed(2), sy: +sy.toFixed(2), sz: +sz.toFixed(2), look: 'box', color: 0x59606b, surf: 1 });
+      pids.push(pid);
+    };
+    walls.forEach((w, k) => put(w[0], base + H / 2, w[1], w[2], H, w[3], k));
+    put(cx, base + H + 0.25, cz, L, 0.5, L, 4);
+    this.timedOps.push({ t: secs, pids, at: new THREE.Vector3(cx, base + H / 2, cz) });
+    _x.set(cx, base + 0.5, cz); this.particles.burst(_x, 0x8a8f98, 40, 10, 0.4);
+    this.sfx.near('thunk', _x); this.sfx.near('hurt', _x);
+    if (tg === this.player) this.shake(0.4);
+    return true;
+  }
+  // FROST HOOK: an ice platform (max 4 per player, each melts after 30 s)
+  icePlatform(p, at) {
+    const mine = this.timedOps.filter((o) => o.ice && o.owner === p.id);
+    if (mine.length >= 4) { mine[0].t = 0; this.updateTimedOps(0); }
+    const pid = this.sid + '-ice' + (this.iceN = (this.iceN || 0) + 1);
+    this.edit({ o: 'place', pid, x: +at.x.toFixed(2), y: +(at.y - 0.3).toFixed(2), z: +at.z.toFixed(2), sx: 4.2, sy: 0.6, sz: 4.2, look: 'ice', color: 0x8fd3ff, surf: 0 });
+    this.timedOps.push({ t: 30, pids: [pid], at: at.clone(), ice: true, owner: p.id });
+    this.particles.burst(at, 0xdff6ff, 34, 8, 0.35);
+    this.particles.burst(at, 0x9fe0ff, 16, 5, 0.3);
+    this.sfx.near('parry', at);
+    return true;
+  }
+  updateTimedOps(dt) {
+    for (let i = this.timedOps.length - 1; i >= 0; i--) {
+      const o = this.timedOps[i];
+      o.t -= dt;
+      if (o.t > 0) continue;
+      this.timedOps.splice(i, 1);
+      let any = false;
+      for (const pid of o.pids) if (this.world.placed.some((b) => b.id === pid)) { this.edit({ o: 'unplace', pid }); any = true; }
+      if (any && o.at.distanceTo(this.player.pos) < 150) this.particles.burst(o.at, o.ice ? 0xdff6ff : 0x8a8f98, 30, 8, 0.4);
     }
   }
   bossSlam(e) {
@@ -1242,6 +1340,7 @@ class Game {
       }
       this.updateFx(dt);
       this.grab.update(dt);
+      this.updateTimedOps(dt);
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) { this.spawnTimer = 0.8; this.manageEnemies(); }
       if (this.net && this.net.ready) {
@@ -1308,11 +1407,13 @@ class Game {
     if (h.state !== HOOK.IDLE && !p.dead) {
       this.gun.head.visible = false;
       this.muzzleWorld(_v);
-      const hk = h.kind === 'grab' ? 'grabber' : h.kind === 'light' ? 'lightrope' : 'normal';
+      const hk = MODE_HOOK[h.kind || 'normal'] || 'normal';
       for (const k in this.hookMeshes) this.hookMeshes[k].visible = k === hk;
       const hm = (this.hookMesh = this.hookMeshes[hk]);
       hm.position.copy(h.pos);
-      hm.lookAt(_v);
+      if (hk === 'boomerang') hm.rotation.set(0, this.time * 22, 0.25);
+      else hm.lookAt(_v);
+      if (hk === 'warp') hm.rotateZ(this.time * 6);
       const st = ROPE_STYLE[h.kind || 'normal'] || ROPE_STYLE.normal;
       this.rope.setStyle(st[0], st[1]);
       // ropes hang: a little while paying out, a lot when the Lightrope is slack
@@ -1325,7 +1426,7 @@ class Game {
         const gy = sag > 0.1 ? this.world.groundAt(_w.x, _w.y + 0.5, _w.z) : null;
         if (gy !== null) sag = Math.min(sag, Math.max(0, _w.y - gy - 0.06));
       }
-      this.rope.set(_v, h.pos, sag);
+      if (hk === 'boomerang') this.rope.hide(); else this.rope.set(_v, h.pos, sag);
     } else {
       this.gun.head.visible = !p.held;
       for (const k in this.hookMeshes) this.hookMeshes[k].visible = false;
@@ -1336,14 +1437,24 @@ class Game {
 
   updateHud(dt) {
     const p = this.player, ui = this.ui;
-    ui.setHook(p.hook.state, this.hookKind(), !!p.held);
+    ui.setHook(p.hook.state, this.hookKind(), p.held ? (p.held.parts ? 'struct' : true) : false);
     this.hurtV = Math.max(0, this.hurtV - dt * 1.5);
     ui.hurt(this.hurtV + (p.hp < this.stats.health * 0.3 && !p.dead ? 0.15 + Math.sin(this.time * 5) * 0.08 : 0));
     // crosshair: does the aim hit something in range?
     this.crossT -= dt;
     if (this.crossT <= 0 && !p.dead) {
       this.crossT = 0.06;
-      if (p.hook.state === HOOK.IDLE) {
+      const kind = this.hookKind();
+      if (kind === 'grabber' && p.hook.state === HOOK.IDLE) {
+        // GROUND GRABBER: yellow = that can be ripped out, red = it won't come loose / out of reach
+        if (p.held) ui.crosshair('grab');
+        else {
+          const f = p.forward(_w);
+          const wh = this.world.raycast(this.camera.position, f, 95);
+          const eh = p.safe ? null : this.hitTestEntities(this.camera.position, f, wh ? wh.dist : 95, p.id, false);
+          ui.crosshair(eh ? 'target' : wh ? (this.world.canGrab(wh) ? 'grab' : 'no') : '');
+        }
+      } else if (p.hook.state === HOOK.IDLE) {
         const f = p.forward(_w);
         const wh = this.world.raycast(this.camera.position, f, this.stats.range);
         const eh = p.safe ? null : this.hitTestEntities(this.camera.position, f, wh ? wh.dist : this.stats.range, p.id, false);
@@ -1415,7 +1526,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !win
 }
 
 const game = new Game();
-window.game = game;
+window.game = game; window.__Enemy = Enemy;
 window.__holesN = () => HOLES.n.value;
 window.Enemy = Enemy;
 
@@ -2075,6 +2186,198 @@ if (location.search.includes("autotest")) {
           r8.hud = { gemText: document.getElementById('gemText').textContent, hookName: document.getElementById('hookName').textContent };
           log.round8 = r8;
         } catch (err) { log.round8 = 'ERR ' + err.stack; }
+        // ================= round 9: Stone Colossus, The Warden, 3 new hooks, bigger grabs, Structure Lifter
+        const r9 = {}; log.round9 = r9;
+        const W9 = game.world;
+        const clr9 = () => { game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = []; for (const b of [...W9.placed]) W9.applyOp({ o: 'unplace', pid: b.id }); game.timedOps = []; game.grab.flying.forEach((x) => game.grab.dispose(x)); game.grab.flying = []; };
+        const mk9 = (off, type = 'brute') => { const e = new Enemy(game, p.pos.clone().add(off), type); e.think = 999; e.wdT = 999; e.cool = 999; e.specialCool = 999; game.enemies.push(e); sim(0.3); return e; };
+        const T9 = (name, fn) => { try { r9[name] = fn(); } catch (err) { r9[name] = 'ERR ' + err.message + ' @' + (err.stack || '').split('\n')[1]; } };
+        T9('defs', () => ({ bosses: BOSS_KEYS.length, colossus: !!ENEMY_TYPES.colossus, warden: !!ENEMY_TYPES.warden, hooks: HOOKS.length, keys: [ABILITY.boulder && ABILITY.boulder.hk, ABILITY.cage && ABILITY.cage.code], passive: !!PASSIVE.structgrab }));
+        // ---- STONE COLOSSUS throws boulders that stun
+        T9('colossus', () => {
+          clr9(); reset(); p.hp = 9999;
+          const b = mk9(clearOff(30), 'colossus'); b.think = 999;
+          const h0 = W9.holes.length;
+          game.bossToss(b, p, 1);
+          const thrown = game.grab.flying.filter((x) => x.foe).length;
+          let stun = 0; const hp0 = p.hp;
+          for (let i = 0; i < 180; i++) { sim(1 / 60); stun = Math.max(stun, p.stunT); }
+          const res = { thrown, holesDug: W9.holes.length - h0, playerDmg: Math.round(hp0 - p.hp), stun: +stun.toFixed(2), landedAsBlock: W9.placed.length };
+          // its AI picks the throw on its own
+          for (const q of [...W9.placed]) W9.applyOp({ o: 'unplace', pid: q.id });
+          const fl0 = game.grab.flying.length; b.specialCool = 0; b.slamCool = 99; b.cool = 99; b.decide(); res.aiThrew = (b.tossN || 0) > 0 && game.grab.flying.length > fl0;
+          b.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; b.hp = 1; b.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' }); sim(0.1);
+          res.drops = game.loot.map((L) => L.k || L.key || L.kind).filter(Boolean);
+          game.loot.forEach((L) => { game.scene.remove(L.gem, L.beam); }); game.loot = [];
+          for (const bg of [...game.bags]) game.removeBag(bg);
+          return res;
+        });
+        // ---- THE WARDEN: cage + chain
+        T9('warden', () => {
+          clr9(); reset(); p.hp = 9999;
+          const w = mk9(clearOff(20), 'warden');
+          const center = p.pos.clone();
+          const ok = game.cage(w, p);
+          const n = W9.placed.length;
+          let maxD = 0;
+          for (let i = 0; i < 120; i++) { p.vel.x = 9; p.vel.z = 4; if (i % 20 === 0) p.vel.y = 9; sim(1 / 60); maxD = Math.max(maxD, Math.hypot(p.pos.x - center.x, p.pos.z - center.z)); }
+          const res = { caged: ok, cageBlocks: n, maxDistInCage: +maxD.toFixed(2) };
+          game.timedOps.forEach((o) => { o.t = 0; }); sim(0.1);
+          res.crumbled = W9.placed.length === 0;
+          // the chain
+          reset(); p.hp = 9999;
+          w.pos.copy(p.pos).add(clearOff(14)); w.vel.set(0, 0, 0); sim(0.2);
+          const tc = p.pos.clone(); tc.y += 0.8; w.shoot(tc, 'leash');
+          for (let i = 0; i < 30 && w.hook.state === HOOK.FLYING; i++) sim(1 / 60);
+          res.leashState = w.hook.state;
+          const d0 = p.pos.distanceTo(w.pos);
+          for (let i = 0; i < 150; i++) { _v.subVectors(p.pos, w.pos).setY(0).normalize(); p.vel.x = _v.x * 14; p.vel.z = _v.z * 14; sim(1 / 60); }
+          res.chain = { startDist: +d0.toFixed(1), afterRunningAway2_5s: +p.pos.distanceTo(w.pos).toFixed(1), minLen: 4 + w.scale };
+          sim(2); for (const q of [...W9.placed]) W9.applyOp({ o: 'unplace', pid: q.id }); game.timedOps = [];
+          reset(); w.pos.copy(p.pos).add(clearOff(16)); w.vel.set(0, 0, 0); w.hook.state = HOOK.IDLE; sim(0.4); w.specialCool = 0; w.cool = 99; w.wardN = 0; const pl0 = W9.placed.length; w.decide(); res.aiCaged = W9.placed.length - pl0;
+          clr9();
+          return res;
+        });
+        // ---- boss abilities
+        T9('boulderToss', () => {
+          clr9(); reset(); game.save.abil.boulder = true;
+          const e = mk9(clearOff(22)); const tc = e.pos.clone(); tc.y += 1.2; aim(tc);
+          const ok = p.useAbility('boulder'); let st = 0;
+          for (let i = 0; i < 150; i++) { sim(1 / 60); st = Math.max(st, e.stunT); }
+          const r = { used: ok, dmg: 160 - e.hp, stun: +st.toFixed(2), block: W9.placed.length };
+          clr9(); return r;
+        });
+        T9('cageAbility', () => {
+          clr9(); reset(); game.save.abil.cage = true;
+          const e = mk9(clearOff(15), 'grappler'); const c0 = e.pos.clone(); const tc = e.pos.clone(); tc.y += 1; aim(tc);
+          const ok = p.useAbility('cage'); const n = W9.placed.length;
+          let maxD = 0; for (let i = 0; i < 90; i++) { e.vel.x = 8; sim(1 / 60); maxD = Math.max(maxD, Math.hypot(e.pos.x - c0.x, e.pos.z - c0.z)); }
+          const r = { used: ok, blocks: n, enemyMaxDist: +maxD.toFixed(2) };
+          clr9(); return r;
+        });
+        // ---- buying the new hooks
+        T9('buyHooks', () => {
+          game.save.coins = 20000; game.save.gems = 18; game.save.hooks = {};
+          for (const k of ['boomerang', 'frost', 'warp']) game.buyHook(k);
+          game.shopMode = 'hook'; game.ui.renderShop(); const rows = document.querySelectorAll('#shopList .hookrow').length; game.shopMode = 'normal';
+          const r = { owned: Object.keys(game.save.hooks), gemsLeft: game.save.gems, coinsLeft: game.save.coins, rows };
+          game.save.hooks = { grabber: true, lightrope: true, boomerang: true, frost: true, warp: true };
+          game.equipHook('normal', true); const seen = []; for (let i = 0; i < 6; i++) { game.cycleHook(); seen.push(game.hookKind()); } r.cycle = seen;
+          return r;
+        });
+        // ---- BOOMERANG: hits two enemies, comes back with a bag
+        T9('boomerang', () => {
+          clr9(); reset(); game.equipHook('boomerang', true);
+          const off = clearOff(16); const e1 = mk9(off.clone().multiplyScalar(0.55)); const e2 = mk9(off);
+          const bag = game.dropCoinBag(p.pos.clone().addScaledVector(off, 0.3).setY(p.pos.y + 0.3), 77);
+          const c0 = game.save.coins;
+          const tc = e2.pos.clone(); tc.y += 1.2; aim(tc); p.shoot();
+          let maxOut = 0; for (let i = 0; i < 360 && p.hook.state !== HOOK.IDLE; i++) { sim(1 / 60); maxOut = Math.max(maxOut, p.hook.pos.distanceTo(p.pos)); }
+          const r = { back: p.hook.state === HOOK.IDLE, dmg: [160 - e1.hp, 160 - e2.hp], maxOut: Math.round(maxOut), bagPicked: !game.bags.includes(bag), coins: game.save.coins - c0 };
+          // calling it back early
+          reset(); p.yaw += 1.5; sim(1 / 60); p.shoot(); sim(0.25); const d1 = p.hook.pos.distanceTo(p.pos); p.shoot(); sim(0.6); r.recall = { outAt: Math.round(d1), back: p.hook.state === HOOK.IDLE };
+          clr9(); return r;
+        });
+        // ---- FROST HOOK: freeze + ice platform
+        T9('frost', () => {
+          clr9(); reset(); game.equipHook('frost', true);
+          const e = mk9(clearOff(15), 'grappler'); const tc = e.pos.clone(); tc.y += 1; aim(tc); p.shoot(); sim(0.3);
+          const r = { frozenT: +e.frozenT.toFixed(2), latched: p.hook.state === HOOK.LATCHED, dmg: 60 - e.hp };
+          p.cancel(); sim(0.4); clr9(); reset();
+          // shoot out over the edge into open sky, then click to freeze a platform
+          let dirOk = false;
+          for (let a = 0; a < 6.3 && !dirOk; a += 0.25) { p.yaw = a; p.pitch = 0.05; sim(1 / 60); if (!W9.raycast(game.camera.position, p.forward(), 40)) dirOk = true; }
+          p.shoot(); sim(0.15); const at = p.hook.pos.clone(); p.shoot(); sim(1 / 60);
+          const ice = W9.placed.find((b) => b.look === 'ice');
+          r.platform = { openSky: dirOk, made: !!ice, hookState: p.hook.state, distFromHook: ice ? +Math.hypot(ice.x - at.x, ice.z - at.z).toFixed(2) : -1 };
+          if (ice) { p.shoot(); sim(0.1); p.pos.set(ice.x, ice.y + 2, ice.z); p.vel.set(0, 0, 0); sim(0.6); r.platform.standOn = p.onGround && Math.abs(p.pos.y - (ice.y + ice.sy / 2)) < 0.15; }
+          for (let i = 0; i < 5; i++) { p.hook.state = HOOK.FLYING; p.hook.kind = 'frost'; p.hook.pos.set(p.pos.x + i * 6, p.pos.y + 20, p.pos.z); p.freezeHook(); }
+          r.maxPlatforms = W9.placed.filter((b) => b.look === 'ice').length;
+          game.timedOps.forEach((o) => { o.t = 0; }); sim(0.1); r.melted = W9.placed.filter((b) => b.look === 'ice').length === 0;
+          p.hook.state = HOOK.IDLE;
+          clr9(); return r;
+        });
+        // ---- WARP HOOK: teleport + swap
+        T9('warp', () => {
+          clr9(); reset(); game.equipHook('warp', true);
+          p.pitch = -0.35; sim(1 / 60);
+          const wh = W9.raycast(game.camera.position, p.forward(), 120); const tgt = wh ? wh.point.clone() : null;
+          const p0 = p.pos.clone(); p.shoot(); for (let i = 0; i < 40 && p.hook.state === HOOK.FLYING; i++) sim(1 / 60);
+          const r = { moved: +p.pos.distanceTo(p0).toFixed(1), nearTarget: tgt ? +Math.hypot(p.pos.x - tgt.x, p.pos.z - tgt.z).toFixed(2) : -1, state: p.hook.state, cd: +p.warpCd.toFixed(2) };
+          p.shoot(); r.blockedByCd = p.hook.state === HOOK.IDLE;
+          sim(1.1); reset();
+          const e = mk9(clearOff(15), 'grappler'); const ep = e.pos.clone(), pp = p.pos.clone(); const tc = e.pos.clone(); tc.y += 1; aim(tc); p.shoot();
+          for (let i = 0; i < 30 && p.hook.state === HOOK.FLYING; i++) sim(1 / 60);
+          r.swap = { meNearTheirSpot: +p.pos.distanceTo(ep).toFixed(1), themNearMine: +e.pos.distanceTo(pp).toFixed(1), stun: +e.stunT.toFixed(2) };
+          game.save.abil.snipe = true; r.snipeBlocked = p.useAbility('snipe') === false;
+          clr9(); return r;
+        });
+        // ---- GROUND GRABBER: bigger pieces, crosshair, landing preview
+        T9('grabber', () => {
+          clr9(); reset(); game.equipHook('grabber', true);
+          const da = c6.pointAt(4.2, 0.45); p.pos.set(da.x, da.y + 0.3, da.z); p.vel.set(0, 0, 0); sim(0.3);
+          p.pitch = -0.9; p.yaw = 1.1; sim(1 / 60); game.crossT = 0; game.updateHud(1 / 60);
+          const cross = document.getElementById('crosshair').className;
+          const h0 = W9.holes.length; p.shoot(); sim(1.4);
+          const hole = W9.holes[W9.holes.length - 1];
+          p.pitch = -0.3; sim(0.2);
+          const pv = game.grab.pv;
+          const r = { crosshair: cross, holeR: W9.holes.length > h0 ? hole.r : 0, held: p.held && [p.held.sx, p.held.sy, p.held.sz].map((v) => +v.toFixed(2)), preview: !!(pv && pv.line.visible), landing: !!(pv && pv.land) };
+          if (pv && pv.land) {
+            const L = pv.land.clone(); p.shoot(); sim(3);
+            const blk = W9.placed[W9.placed.length - 1];
+            r.landedNearPreview = blk ? +Math.hypot(blk.x - L.x, blk.z - L.z).toFixed(2) : -1;
+          }
+          r.previewHiddenAfter = !(pv && pv.line.visible);
+          game.crossT = 0; p.pitch = 1.2; sim(1 / 60); game.updateHud(1 / 60); r.crossSky = document.getElementById('crosshair').className;
+          clr9(); return r;
+        });
+        // ---- STRUCTURE LIFTER: pick up a whole building, throw it, pick it up again
+        T9('structLifter', () => {
+          clr9(); reset(); game.equipHook('grabber', true);
+          game.save.passive = { structgrab: true };
+          let I0 = null, st = 0;
+          for (const I of W9.islandsInRadius(p.pos.x, p.pos.z, 500)) { if (I.kind === 'spawn' || inSafeZone(I)) continue; const b = I.boxes.find((b) => b.st && !b.noGrab && b.sy > 2); if (b) { I0 = I; st = b.st; break; } }
+          if (!I0) return 'no building found';
+          const bx = I0.boxes.filter((b) => b.st === st), nb = bx.length, tall = bx.reduce((a, b) => (b.sy > a.sy ? b : a));
+          const side = tall.sx > tall.sz ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+          const half = (side.x ? tall.sx : tall.sz) / 2 + 1.5;
+          const hit = W9.raycast(new THREE.Vector3(tall.x, tall.y, tall.z).addScaledVector(side, half), side.clone().negate(), half);
+          const r = { hitType: hit && hit.type, sameBuilding: !!(hit && hit.obj && hit.obj.st === st) };
+          const piece = hit ? game.grab.rip(hit, side.clone().negate(), p) : null;
+          r.parts = piece && piece.parts ? piece.parts.length : 0; r.boxesInBuilding = nb;
+          r.goneFromIsland = !I0.boxes.some((b) => b.st === st);
+          r.roofsGone = I0.deco.filter((d) => d.st === st && d.type === 'roof').every((d) => d.gone);
+          r.size = piece ? [piece.sx, piece.sy, piece.sz].map((v) => +v.toFixed(1)) : null;
+          if (piece) {
+            game.grab.hold(p, piece);
+            const e = mk9(clearOff(24)); const tc = e.pos.clone(); tc.y += 1; aim(tc); sim(0.1);
+            p.shoot(); let st2 = 0; for (let i = 0; i < 200; i++) { sim(1 / 60); st2 = Math.max(st2, e.stunT); }
+            r.thrownHit = { dmg: 160 - e.hp, stun: +st2.toFixed(2) };
+            const grp = [...W9.placedGrps.values()][0];
+            r.placedGroup = grp ? { parts: grp.parts.length, solid: W9.placed.filter((b) => b.grp === grp).length } : null;
+            if (grp) {
+              const part = grp.parts.find((x) => !x.vp.deco && !x.vp.roof);
+              p.pos.set(part.x, part.y + part.sy / 2 + 3, part.z); p.vel.set(0, 0, 0); sim(0.8);
+              r.standOnThrownBuilding = p.onGround && p.pos.y > part.y;
+              // network copy: the same place op arrives at another player
+              const op = game.editLog.find((o) => o.o === 'place' && o.pid === grp.id);
+              r.opHasParts = !!(op && op.parts && op.parts.length);
+              // pick the whole thing up again
+              const h2 = W9.raycast(new THREE.Vector3(part.x, part.y, part.z).add(new THREE.Vector3(0, 30, 0)), new THREE.Vector3(0, -1, 0), 40);
+              const again = h2 && h2.type === 'placed' ? game.grab.rip(h2, new THREE.Vector3(0, -1, 0), p) : null;
+              r.regrabWhole = { type: h2 && h2.type, parts: again && again.parts ? again.parts.length : 0, groupsLeft: W9.placedGrps.size };
+              if (again) game.grab.dispose(again);
+            }
+            // a remote thrown building arrives over the network
+            game.onNet({ t: 'wed', op: { id: 'peerX-e77', o: 'place', pid: 'peerX-pcB', x: p.pos.x + 30, y: p.pos.y + 3, z: p.pos.z, sx: 6, sy: 4, sz: 6, look: 'struct', color: 0x8f8b83, surf: 1, parts: [{ x: 0, y: -1.5, z: 0, sx: 6, sy: 1, sz: 6, color: 0x8f8b83, surf: 1 }, { roof: 1, x: 0, y: -1, z: 0, r: 4, h: 3, color: 0xa0412d }] } });
+            r.remoteBuilding = W9.placedGrps.has('peerX-pcB');
+          }
+          // without the passive a hit on a building is only a chunk
+          game.save.passive = {};
+          clr9(); return r;
+        });
+        game.equipHook('normal', true); game.save.hooks = {}; game.save.gems = 0; game.save.passive = {};
         // music: render 6 s offline and measure it
         try {
           const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
