@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { makeCharacter, makeHookHead, Rope } from './models.js';
+const HOOK_KINDS = ['normal', 'grabber', 'lightrope'];
+const HOOK_STYLE = { normal: [0x1d4d24, 0.035, 2.2], grabber: [0x1a1a1a, 0.06, 3.4], lightrope: [0xc9ccd0, 0.02, 1.6] };
 import { lerpAngle } from './noise.js';
 import { ENEMY_TYPES } from './enemytypes.js';
 
@@ -28,7 +30,18 @@ export class Remote {
     this.yaw = 0; this.yawT = 0; this.pitch = 0;
     this.hp = 100; this.maxHp = 100; this.dead = false;
     this.hookState = 0; this.hookPos = new V(); this.hookDisp = new V();
-    this.init = false; this.lastSeen = performance.now(); this.ground = null;
+    this.init = false; this.lastSeen = performance.now(); this.ground = null; this.hookKind = 'normal'; this.gyT = 0; this.gy = null;
+  }
+  setHookKind(k) {
+    if (!HOOK_STYLE[k] || k === this.hookKind) return;
+    this.hookKind = k;
+    this.model.setHook(k);
+    const vis = this.head.visible;
+    this.game.scene.remove(this.head);
+    this.head = makeHookHead(k);
+    this.head.scale.setScalar(HOOK_STYLE[k][2]); this.head.visible = vis;
+    this.game.scene.add(this.head);
+    this.rope.mesh.material.color.set(HOOK_STYLE[k][0]); this.rope.thick = HOOK_STYLE[k][1];
   }
   applyPlayer(s) {
     this.target.set(s.x, s.y, s.z);
@@ -37,6 +50,7 @@ export class Remote {
     this.hp = s.hp; this.maxHp = s.mh || 100;
     this.dead = !!s.d;
     this.setHook(s.hs, s.hx, s.hy, s.hz);
+    this.setHookKind(HOOK_KINDS[s.hk | 0] || 'normal');
     if (s.n && s.n !== this.name) { this.name = s.n; this.model.setName(s.n); }
     this.seen();
   }
@@ -70,6 +84,9 @@ export class Remote {
     const hs = Math.hypot(this.vel.x, this.vel.z);
     m.update(dt, this.game.camera, hs > 1 && Math.abs(this.vel.y) < 1, this.pitch);
     this.ground = this.game.world.islandUnder(this.pos);
+    this.gyT -= dt;
+    if (this.gyT <= 0) { this.gyT = 0.15; this.gy = this.game.world.groundAt(this.pos.x, this.pos.y + 0.5, this.pos.z); }
+    m.setGround(this.gy === null ? null : Math.max(0, this.pos.y - this.gy));
     if (this.hookState && !this.dead) {
       this.hookDisp.lerp(this.hookPos, 1 - Math.exp(-15 * dt));
       m.group.updateMatrixWorld();

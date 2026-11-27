@@ -18,6 +18,7 @@ export class Input {
       if (e.code === 'KeyQ' || e.code === 'KeyX') game.cancelHook();
       if (e.code === 'KeyE') game.interact();
       if (e.code === 'KeyF') game.shootHook();
+      if (e.code === 'Tab') { e.preventDefault(); game.cycleHook(); }
       const ak = KEYMAP[e.code];
       if (ak) game.useAbility(ak);
       if (e.code === 'KeyM') game.ui.toast(game.sfx.toggleMute() ? '🔇 Muted' : '🔊 Sound on');
@@ -34,6 +35,13 @@ export class Input {
       else if (e.button === 2) game.cancelHook();
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    let wheelT = 0;
+    addEventListener('wheel', (e) => {
+      if (!this.locked || !game.running) return;
+      const now = performance.now();
+      if (now - wheelT < 250 || Math.abs(e.deltaY) < 4) return;
+      wheelT = now; game.cycleHook();
+    }, { passive: true });
     addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       let dx = e.movementX, dy = e.movementY;
@@ -139,6 +147,7 @@ export class Input {
       document.getElementById('btnRun').classList.toggle('on', this.runToggle);
     });
     bind('btnShop', () => g.interact());
+    bind('btnHook', () => g.cycleHook());
     bind('btnMenu', () => g.pause());
   }
 

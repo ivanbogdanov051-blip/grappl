@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { Grass, Dust } from './realism.js';
+import { Grass, Dust, HOLES } from './realism.js';
 import { World, SPAWN, CHUNK, KILL_Y, inSafeZone } from './world.js';
 import { Player, HOOK } from './player.js';
 import { Enemy } from './enemy.js';
@@ -15,8 +15,10 @@ import { UI } from './ui.js';
 import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
-import { makeGun, makeHookHead, Rope, makeCharacter, makeTextSprite } from './models.js';
-import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE } from './upgrades.js';
+import { makeGun, makeHookHead, Rope, SagRope, ropeSag, makeCharacter, makeTextSprite } from './models.js';
+import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE, HOOKS, HOOK_DEF } from './upgrades.js';
+import { Grab } from './grab.js';
+import { applyTether } from './entity.js';
 import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
 
 window.__errs = [];
@@ -27,6 +29,8 @@ const TAU = Math.PI * 2;
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const SAVE_KEY = 'skygrapple_save_v1';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3();
+const HOOK_KINDS = ['normal', 'grabber', 'lightrope'];
+const ROPE_STYLE = { normal: [0x23262b, 0.03], grab: [0x1a1a1a, 0.055], light: [0xcfd3d8, 0.016] };
 
 function loadSave() {
   const def = { name: '', coins: 0, up: {}, abil: {}, quality: isTouch ? 'low' : 'high' };
@@ -54,7 +58,7 @@ class Game {
     r.setPixelRatio(Math.min(devicePixelRatio, hi ? 2 : 1.25));
     r.setSize(innerWidth, innerHeight);
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 0.85;
+    r.toneMappingExposure = 0.74;
     r.shadowMap.enabled = hi;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     r.autoClear = false;
@@ -81,6 +85,9 @@ class Game {
     this.particles = new Particles(this.scene);
     this.grass = new Grass(this.scene, this.world, hi, CHUNK);
     this.dust = new Dust(this.scene, hi ? 350 : 160);
+    this.grab = new Grab(this);
+    this.editLog = []; this.editSeen = new Set();
+    this.camDip = 0; this.stepT = 0;
     this.strikes = []; this.wells = []; this.missiles = []; this.loot = []; this.zaps = []; this.mines = []; this.spawnQueue = []; this.dots = []; this.bags = []; this.decoys = []; this.warpT = 0;
     this.fxGeo = { ring: new THREE.RingGeometry(0.78, 1, 40), bolt: new THREE.CylinderGeometry(0.35, 0.7, 240, 8, 1, true), ball: new THREE.SphereGeometry(1, 16, 12), mine: new THREE.CylinderGeometry(0.55, 0.65, 0.22, 16), gem: new THREE.OctahedronGeometry(1, 0), beam: new THREE.CylinderGeometry(0.8, 0.8, 90, 10, 1, true) };
     this.sfx = new Sfx();
@@ -102,6 +109,10 @@ class Game {
     this.save.abil = this.save.abil || {};
     this.save.hidden = this.save.hidden || {};
     this.save.passive = this.save.passive || {};
+    this.save.gems = this.save.gems || 0;
+    this.save.hooks = this.save.hooks || {};
+    this.gun.setVariant(this.hookKind());
+    this.ui.hookLabel(this.hookKind(), this.ownedHooks().length);
     if (this.save.musicVol === undefined) this.save.musicVol = 0.5;
     this.sfx.music.setVolume(this.save.musicVol);
     this.ui.renderAbilities();
@@ -130,9 +141,9 @@ class Game {
     this.scene.environment = this.envTex;
     pmrem.dispose();
 
-    this.hemi = new THREE.HemisphereLight(0xcfe3ff, 0x5b6b4a, 0.55);
+    this.hemi = new THREE.HemisphereLight(0xc6dcff, 0x4f5a3c, 0.42);
     this.scene.add(this.hemi);
-    const sun = (this.sun = new THREE.DirectionalLight(0xfff1dd, 2.6));
+    const sun = (this.sun = new THREE.DirectionalLight(0xffe6c8, 3.1));
     sun.castShadow = hi;
     if (hi) {
       sun.shadow.mapSize.set(2048, 2048);
@@ -154,11 +165,13 @@ class Game {
     this.gun = makeGun(true);
     this.gun.group.scale.setScalar(0.72);
     this.gunScene.add(this.gun.group);
-    this.hookMesh = makeHookHead();
-    this.hookMesh.scale.setScalar(2.2);
-    this.hookMesh.visible = false;
-    this.scene.add(this.hookMesh);
-    this.rope = new Rope(0x23262b, 0.03);
+    this.hookMeshes = {};
+    for (const [k, sc] of [['normal', 2.2], ['grabber', 3.4], ['lightrope', 1.6]]) {
+      const m = makeHookHead(k); m.scale.setScalar(sc); m.visible = false;
+      this.scene.add(m); this.hookMeshes[k] = m;
+    }
+    this.hookMesh = this.hookMeshes.normal;
+    this.rope = new SagRope(0x23262b, 0.03);
     this.scene.add(this.rope.mesh);
   }
   addBeacon() {
@@ -237,7 +250,7 @@ class Game {
     if (this.shopOpen) { this.closeShop(); return; }
     if (!this.nearShop || this.player.dead) return;
     this.shopOpen = true;
-    this.shopMode = this.nearShop.passive ? 'passive' : 'normal';
+    this.shopMode = this.nearShop.type || (this.nearShop.passive ? 'passive' : 'normal');
     if (document.pointerLockElement) document.exitPointerLock();
     this.ui.openShop();
   }
@@ -270,6 +283,66 @@ class Game {
     this.sfx.buy(); this.sfx.kill();
     this.ui.renderShop();
     this.ui.toast(`${P.icon} ${P.name} is now always active!`);
+  }
+  // ---- grappling hooks (bought with gems in HOOK SHOPS)
+  hookKind() { const k = this.save.hookSel; return k && k !== 'normal' && this.save.hooks && this.save.hooks[k] ? k : 'normal'; }
+  ownedHooks() { return HOOKS.filter((H) => H.key === 'normal' || (this.save.hooks || {})[H.key]).map((H) => H.key); }
+  equipHook(key, quiet) {
+    if (key !== 'normal' && !this.save.hooks[key]) return;
+    const p = this.player;
+    if (p.held) this.grab.dropHeld(p);
+    if (p.hook.state !== HOOK.IDLE) p.hook.state = HOOK.RETRACT;
+    this.save.hookSel = key; this.persist();
+    this.gun.setVariant(key);
+    this.ui.hookLabel(key, this.ownedHooks().length);
+    if (!quiet) { const H = HOOK_DEF[key]; this.ui.toast(`${H.icon} ${H.name} equipped`); this.sfx.cancel(); }
+    if (this.shopOpen) this.ui.renderShop();
+  }
+  cycleHook() {
+    if (!this.running || this.shopOpen) return;
+    const o = this.ownedHooks();
+    if (o.length < 2) { this.ui.toast('🪝 Get new hooks with 💎 gems at a HOOK SHOP (black-and-yellow roof)'); return; }
+    this.equipHook(o[(o.indexOf(this.hookKind()) + 1) % o.length]);
+  }
+  buyHook(key) {
+    const H = HOOK_DEF[key];
+    if (!H || key === 'normal' || this.save.hooks[key]) return;
+    if (this.save.gems < H.gems || this.save.coins < H.cost) return;
+    this.save.gems -= H.gems; this.save.coins -= H.cost; this.save.hooks[key] = true;
+    this.persist();
+    this.sfx.buy(); this.sfx.kill();
+    this.equipHook(key, true);
+    this.ui.renderShop();
+    this.ui.toast(`${H.icon} ${H.name} is yours and equipped! ${this.ui.touch ? 'The 🪝 button' : 'Tab / mouse wheel'} switches hooks`);
+  }
+  addGems(n) { this.save.gems = (this.save.gems || 0) + n; this.persist(); }
+  // Lightrope: keep whatever is on the end of the rope within reach
+  tetherEntity(p, tg, L) {
+    if (tg.T && tg.T.boss) { applyTether(p, tg.pos, L, 0); return; } // too heavy: the boss drags YOU around
+    if (this.enemies.includes(tg)) { tg.applyHit({ mode: 'tether', a: p.pos.toArray(), L, attacker: p.id, aname: this.name }); return; }
+    if (this.remotes.has(tg.id) && this.net && this.time - (this.lastTeth || 0) > 0.1) {
+      this.lastTeth = this.time;
+      const r2 = (v) => Math.round(v * 100) / 100;
+      this.net.send({ t: 'hit', target: tg.id, mode: 'tether', a: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z)], L: r2(L), attacker: p.id, aname: this.name });
+    }
+  }
+  // ---- world edits (Ground Grabber): applied here, sent to everyone, kept for players who join later
+  edit(op) {
+    op.id = op.id || this.sid + '-e' + (this.editN = (this.editN || 0) + 1);
+    this.editSeen.add(op.id); this.editLog.push(op);
+    if (this.editLog.length > 600) this.editLog.shift();
+    const res = this.world.applyOp(op);
+    if (this.net) this.net.send({ t: 'wed', op });
+    return res;
+  }
+  remoteEdit(op) {
+    if (!op || typeof op !== 'object' || !op.id || this.editSeen.has(op.id)) return;
+    this.editSeen.add(op.id); this.editLog.push(op);
+    if (this.editLog.length > 600) this.editLog.shift();
+    if (op.o === 'place') this.grab.landedRemote(op.pid);
+    this.world.applyOp(op);
+    const at = op.o === 'dig' ? [op.x, op.y, op.z] : op.o === 'cut' && Array.isArray(op.c) ? op.c : null;
+    if (at && at.every(isFinite)) { _v.set(+at[0], +at[1], +at[2]); if (_v.distanceTo(this.player.pos) < 120) this.particles.burst(_v, 0x8a7a66, 16, 7, 0.3); }
   }
   buyAbility(key) {
     const A = ABILITY[key];
@@ -492,23 +565,36 @@ class Game {
     this.sfx.near('parry', e.pos);
   }
   addDot(id, owner, ticks, dmg) { this.dots.push({ id, owner, n: ticks, dmg, t: 0.5 }); }
-  dropCoinBag(pos, n, id, remote) {
+  dropCoinBag(pos, n, id, remote, kind = 'coin') {
     const g = new THREE.Group();
-    const sack = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0xc9a050, roughness: 0.8 }));
-    sack.scale.set(0.7, 0.6, 0.7); sack.position.y = 0.55; g.add(sack);
-    const knot = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0x8a6a30, roughness: 0.8 }));
-    knot.scale.setScalar(0.22); knot.position.y = 1.15; g.add(knot);
-    const coin = new THREE.Mesh(this.fxGeo.mine, new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xaa7700, emissiveIntensity: 0.8, metalness: 0.7, roughness: 0.3 }));
-    coin.scale.set(0.8, 0.6, 0.8); coin.rotation.x = Math.PI / 2; coin.position.set(0, 0.65, 0.62); g.add(coin);
-    const label = makeTextSprite(`💰 ${n}`, { bg: 'rgba(40,30,0,0.75)', color: '#ffd23a', size: 1 });
+    const gem = kind === 'gem';
+    if (gem) {
+      // a cluster of glowing gems
+      const gm = new THREE.MeshStandardMaterial({ color: 0x7af0ff, emissive: 0x2a9cff, emissiveIntensity: 1.4, metalness: 0.3, roughness: 0.15 });
+      const spin = new THREE.Group(); g.add(spin);
+      for (let i = 0; i < 4; i++) {
+        const c = new THREE.Mesh(this.fxGeo.gem, gm);
+        const a = (i / 4) * TAU;
+        c.scale.set(0.32, 0.55, 0.32); c.position.set(i ? Math.cos(a) * 0.45 : 0, i ? 0.45 : 0.9, i ? Math.sin(a) * 0.45 : 0); c.rotation.z = i ? 0.4 : 0;
+        spin.add(c);
+      }
+    } else {
+      const sack = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0xc9a050, roughness: 0.8 }));
+      sack.scale.set(0.7, 0.6, 0.7); sack.position.y = 0.55; g.add(sack);
+      const knot = new THREE.Mesh(this.fxGeo.ball, new THREE.MeshStandardMaterial({ color: 0x8a6a30, roughness: 0.8 }));
+      knot.scale.setScalar(0.22); knot.position.y = 1.15; g.add(knot);
+      const coin = new THREE.Mesh(this.fxGeo.mine, new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xaa7700, emissiveIntensity: 0.8, metalness: 0.7, roughness: 0.3 }));
+      coin.scale.set(0.8, 0.6, 0.8); coin.rotation.x = Math.PI / 2; coin.position.set(0, 0.65, 0.62); g.add(coin);
+    }
+    const label = makeTextSprite(gem ? `💎 ${n}` : `💰 ${n}`, { bg: gem ? 'rgba(0,30,50,0.75)' : 'rgba(40,30,0,0.75)', color: gem ? '#7af0ff' : '#ffd23a', size: 1 });
     label.position.y = 2.2; g.add(label);
-    const beam = new THREE.Mesh(this.fxGeo.beam, new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    const beam = new THREE.Mesh(this.fxGeo.beam, new THREE.MeshBasicMaterial({ color: gem ? 0x5ae0ff : 0xffd23a, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
     beam.scale.set(0.5, 1, 0.5); beam.position.y = 45; g.add(beam);
     g.position.copy(pos);
     this.scene.add(g);
-    const bag = { id: id || this.sid + '-bag-' + Math.floor(Math.random() * 1e9), pos: pos.clone(), n, g, t: 180 };
+    const bag = { id: id || this.sid + '-bag-' + Math.floor(Math.random() * 1e9), pos: pos.clone(), n, g, t: 180, kind: gem ? 'gem' : 'coin' };
     this.bags.push(bag);
-    if (!remote && this.net) this.net.send({ t: 'bag', id: bag.id, x: pos.x, y: pos.y, z: pos.z, n });
+    if (!remote && this.net) this.net.send({ t: 'bag', id: bag.id, x: pos.x, y: pos.y, z: pos.z, n, k: bag.kind });
     return bag;
   }
   removeBag(bag) {
@@ -735,9 +821,10 @@ class Game {
       b.g.position.y = b.pos.y + Math.abs(Math.sin(this.time * 3)) * 0.25;
       const reach = p.has('coinmagnet') ? 12 : 2.6;
       if (!p.dead && p.pos.distanceTo(b.pos) < reach) {
-        this.save.coins += b.n; this.persist();
-        this.ui.toast(`💰 Picked up ${b.n} coins!`); this.sfx.buy(); this.sfx.coin();
-        _v.copy(b.pos); _v.y += 0.8; this.particles.burst(_v, 0xffd23a, 30, 8, 0.3);
+        if (b.kind === 'gem') { this.addGems(b.n); this.ui.toast(`💎 Picked up ${b.n} gems! Spend them at a HOOK SHOP`); }
+        else { this.save.coins += b.n; this.persist(); this.ui.toast(`💰 Picked up ${b.n} coins!`); }
+        this.sfx.buy(); this.sfx.coin();
+        _v.copy(b.pos); _v.y += 0.8; this.particles.burst(_v, b.kind === 'gem' ? 0x7af0ff : 0xffd23a, 30, 8, 0.3);
         if (this.net) this.net.send({ t: 'bagTake', id: b.id });
         this.removeBag(b);
       } else if (b.t <= 0) this.removeBag(b);
@@ -951,12 +1038,11 @@ class Game {
     this.ui.showDeath(msg);
     // you drop ALL your coins where you died (or where you fell from)
     const n = this.save.coins;
+    let at = null;
+    if (p.pos.y > KILL_Y + 20) { const gy = this.world.groundAt(p.pos.x, p.pos.y + 2, p.pos.z); if (gy !== null && p.pos.y - gy < 30) at = new THREE.Vector3(p.pos.x, gy, p.pos.z); }
+    if (!at && p.lastGround) at = p.lastGround.clone();
+    if (!at) at = p.pos.clone();
     if (n > 0) {
-      let at = null;
-      if (p.pos.y > KILL_Y + 20) { const gy = this.world.groundAt(p.pos.x, p.pos.y + 2, p.pos.z); if (gy !== null && p.pos.y - gy < 30) at = new THREE.Vector3(p.pos.x, gy, p.pos.z); }
-      if (!at && p.lastGround) at = p.lastGround.clone();
-      if (!at) at = p.pos.clone();
-      if (inSafeZone(at)) { /* died on the spawn island: keep it there */ }
       this.save.coins = 0; this.persist();
       this.dropCoinBag(at, n);
       this.ui.deathCoins(n);
@@ -964,17 +1050,30 @@ class Game {
     _v.copy(p.pos); _v.y += 0.7;
     this.particles.burst(_v, 0x2f7bff, 24, 9, 0.35);
     const la = p.lastAttacker;
+    // taken out by another player: 2 gems drop for them to grab
+    const killerR = la && performance.now() - la.t < 12000 ? this.remotes.get(la.id) : null;
+    if (killerR && killerR.kind === 'player') { const ga = at.clone(); ga.x += 1.5; this.dropCoinBag(ga, 2, null, false, 'gem'); }
     if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, this.name, 'player');
     else this.ui.feed(`☁️ ${this.name} fell`, 'me');
   }
   onEnemyDeath(e) {
     const la = e.lastAttacker;
     const drop = e.T.drop ? { k: e.T.drop, at: e.pos.y > KILL_Y + 25 ? e.pos.toArray() : null } : null;
-    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward, drop);
-    if (e.T.boss) this.ui.feed(`👑 ${e.name} has fallen!`, 'me');
+    const fell = e.pos.y <= KILL_Y + 25;
+    if (la && performance.now() - la.t < 12000) this.reportKill(la.id, la.name, e.name, 'enemy', e.T.reward, drop, e.T.boss && fell ? 10 : 0);
+    if (e.T.boss) {
+      this.ui.feed(`👑 ${e.name} has fallen!`, 'me');
+      if (!fell) {
+        // every boss drops 10 gems where it died (anyone can grab them)
+        const gy = this.world.groundAt(e.pos.x, e.pos.y + 2, e.pos.z);
+        const at = new THREE.Vector3(e.pos.x + 2, gy !== null && e.pos.y - gy < 25 ? gy : e.pos.y, e.pos.z);
+        this.dropCoinBag(at, 10, null, false, 'gem');
+        this.ui.feed('💎 10 gems dropped (follow the cyan beam)', 'me');
+      }
+    }
   }
-  reportKill(killer, kname, vname, vkind, reward, drop) {
-    const m = { t: 'kill', killer, kname, vname, vkind, reward, drop };
+  reportKill(killer, kname, vname, vkind, reward, drop, gems = 0) {
+    const m = { t: 'kill', killer, kname, vname, vkind, reward, drop, gems };
     this.handleKill(m);
     if (this.net) this.net.send(m);
   }
@@ -989,6 +1088,7 @@ class Game {
       this.sfx.kill();
       this.ui.toast(`+${reward} 🪙  ${m.vname} eliminated!`);
       if (m.drop) this.spawnLoot(m.drop.k, m.drop.at);
+      if (m.gems > 0) { const gn = Math.min(50, m.gems | 0); this.addGems(gn); this.ui.feed(`💎 +${gn} gems`, 'me'); }
     }
   }
   manageEnemies() {
@@ -1059,6 +1159,8 @@ class Game {
           r = new Remote(this, ps.id, 'player', String(ps.n || 'Player').slice(0, 16), ps.id);
           this.remotes.set(ps.id, r);
           this.ui.feed(`${r.name} joined`);
+          // catch them up on every hole, ripped wall and thrown block so far
+          if (this.editLog.length && this.net) this.net.send({ t: 'wlog', ops: this.editLog.slice(-400) });
         }
         r.applyPlayer(ps);
         const seen = new Set();
@@ -1083,7 +1185,10 @@ class Game {
         break;
       }
       case 'kill': this.handleKill(m); break;
-      case 'bag': if (!this.bags.some((b) => b.id === m.id) && isFinite(m.x) && m.n > 0) this.dropCoinBag(new THREE.Vector3(m.x, m.y, m.z), Math.min(1e7, Math.floor(m.n)), String(m.id), true); break;
+      case 'bag': if (!this.bags.some((b) => b.id === m.id) && isFinite(m.x) && m.n > 0) this.dropCoinBag(new THREE.Vector3(m.x, m.y, m.z), Math.min(m.k === 'gem' ? 50 : 1e7, Math.floor(m.n)), String(m.id), true, m.k === 'gem' ? 'gem' : 'coin'); break;
+      case 'wed': this.remoteEdit(m.op); break;
+      case 'wlog': if (Array.isArray(m.ops)) for (const op of m.ops.slice(0, 600)) this.remoteEdit(op); break;
+      case 'throw': if (m.owner !== this.player.id) this.grab.fromNet(m); break;
       case 'bagTake': { const b = this.bags.find((x) => x.id === m.id); if (b) this.removeBag(b); break; }
       case 'leave': this.removeOwner(m.id); break;
     }
@@ -1095,7 +1200,7 @@ class Game {
       id: p.id, n: this.name, x: r2(p.pos.x), y: r2(p.pos.y), z: r2(p.pos.z),
       vx: r2(p.vel.x), vy: r2(p.vel.y), vz: r2(p.vel.z), yw: r2(p.yaw), pt: r2(p.pitch),
       hp: Math.round(p.hp), mh: this.stats.health, d: p.dead ? 1 : 0,
-      hs: h.state, hx: r2(h.pos.x), hy: r2(h.pos.y), hz: r2(h.pos.z),
+      hs: h.state, hx: r2(h.pos.x), hy: r2(h.pos.y), hz: r2(h.pos.z), hk: HOOK_KINDS.indexOf(this.hookKind()),
     };
     const es = [];
     for (const e of this.enemies) {
@@ -1117,7 +1222,13 @@ class Game {
     const p = this.player, cam = this.camera;
     if (this.running) {
       this.input.update(dt);
+      const vy0 = p.vel.y, air0 = !p.onGround;
       p.update(dt, this.input);
+      if (air0 && p.onGround && vy0 < -9 && !p.dead) {
+        // landing: the camera dips and dust kicks up
+        this.camDip = Math.min(0.5, -vy0 * 0.012);
+        _v.copy(p.pos); _v.y += 0.15; this.particles.burst(_v, 0xb9a88a, Math.min(16, Math.round(-vy0 * 0.4)), 4, 0.22);
+      }
       this.updateLaser(p, dt);
       if (this.warpT > 0) this.warpT -= dt;
       const edt = this.warpT > 0 ? dt * 0.3 : dt;
@@ -1130,6 +1241,7 @@ class Game {
         r.update(dt);
       }
       this.updateFx(dt);
+      this.grab.update(dt);
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) { this.spawnTimer = 0.8; this.manageEnemies(); }
       if (this.net && this.net.ready) {
@@ -1138,6 +1250,15 @@ class Game {
       }
       // camera
       p.eye(cam.position);
+      // head bob while running, dip on landing, dust from your feet
+      const hsp = Math.hypot(p.vel.x, p.vel.z);
+      this.camDip *= Math.exp(-7 * dt);
+      cam.position.y -= this.camDip;
+      if (p.onGround && hsp > 2) {
+        cam.position.y += Math.sin(this.bob * 2) * 0.035 * Math.min(1, hsp / 12);
+        this.stepT -= dt * hsp;
+        if (hsp > 9 && this.stepT <= 0) { this.stepT = 2.4; _v.copy(p.pos); _v.y += 0.1; this.particles.burst(_v, 0xb9a88a, 2, 1.5, 0.14); }
+      }
       this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.5);
       const sk = this.shakeAmt * this.shakeAmt * 0.06;
       cam.rotation.set(p.pitch + (Math.random() - 0.5) * sk, p.yaw + (Math.random() - 0.5) * sk, 0);
@@ -1187,20 +1308,35 @@ class Game {
     if (h.state !== HOOK.IDLE && !p.dead) {
       this.gun.head.visible = false;
       this.muzzleWorld(_v);
-      this.hookMesh.visible = true;
-      this.hookMesh.position.copy(h.pos);
-      this.hookMesh.lookAt(_v);
-      this.rope.set(_v, h.pos);
+      const hk = h.kind === 'grab' ? 'grabber' : h.kind === 'light' ? 'lightrope' : 'normal';
+      for (const k in this.hookMeshes) this.hookMeshes[k].visible = k === hk;
+      const hm = (this.hookMesh = this.hookMeshes[hk]);
+      hm.position.copy(h.pos);
+      hm.lookAt(_v);
+      const st = ROPE_STYLE[h.kind || 'normal'] || ROPE_STYLE.normal;
+      this.rope.setStyle(st[0], st[1]);
+      // ropes hang: a little while paying out, a lot when the Lightrope is slack
+      const d = _v.distanceTo(h.pos);
+      let sag = h.state === HOOK.FLYING ? d * 0.025 : h.state === HOOK.RETRACT ? d * 0.06 : 0;
+      if (h.kind === 'light' && (h.state === HOOK.ATTACHED || h.state === HOOK.LATCHED)) {
+        sag = ropeSag(h.L + 0.9, d);
+        // a slack rope lies on the ground instead of sinking into it
+        _w.addVectors(_v, h.pos).multiplyScalar(0.5);
+        const gy = sag > 0.1 ? this.world.groundAt(_w.x, _w.y + 0.5, _w.z) : null;
+        if (gy !== null) sag = Math.min(sag, Math.max(0, _w.y - gy - 0.06));
+      }
+      this.rope.set(_v, h.pos, sag);
     } else {
-      this.gun.head.visible = true;
-      this.hookMesh.visible = false;
+      this.gun.head.visible = !p.held;
+      for (const k in this.hookMeshes) this.hookMeshes[k].visible = false;
       this.rope.hide();
     }
+    this.grab.updateHeld(p);
   }
 
   updateHud(dt) {
     const p = this.player, ui = this.ui;
-    ui.setHook(p.hook.state);
+    ui.setHook(p.hook.state, this.hookKind(), !!p.held);
     this.hurtV = Math.max(0, this.hurtV - dt * 1.5);
     ui.hurt(this.hurtV + (p.hp < this.stats.health * 0.3 && !p.dead ? 0.15 + Math.sin(this.time * 5) * 0.08 : 0));
     // crosshair: does the aim hit something in range?
@@ -1220,7 +1356,7 @@ class Game {
       this.shopT = 0.25;
       const ns = this.world.nearestShop(p.pos);
       this.nearShop = ns && ns.dist < 7 ? ns.shop : null;
-      ui.shopPrompt(!!this.nearShop && !this.shopOpen && !p.dead, this.nearShop && this.nearShop.passive);
+      ui.shopPrompt(!!this.nearShop && !this.shopOpen && !p.dead, this.nearShop && (this.nearShop.type || (this.nearShop.passive ? 'passive' : 'normal')));
       const ff = Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw));
       const nn = this.world.nearestShop(p.pos, 'normal');
       if (nn && nn.dist > 7) ui.shopArrow(ff - Math.atan2(nn.shop.x - p.pos.x, nn.shop.z - p.pos.z), nn.dist);
@@ -1228,6 +1364,9 @@ class Game {
       const np = this.world.nearestShop(p.pos, 'passive');
       if (np && np.dist > 7) ui.passArrow(ff - Math.atan2(np.shop.x - p.pos.x, np.shop.z - p.pos.z), np.dist);
       else ui.passArrow(null);
+      const nh = this.world.nearestShop(p.pos, 'hook');
+      if (nh && nh.dist > 7) ui.hookArrow(ff - Math.atan2(nh.shop.x - p.pos.x, nh.shop.z - p.pos.z), nh.dist);
+      else ui.hookArrow(null);
     }
     this.hudT -= dt;
     if (this.hudT <= 0) {
@@ -1252,7 +1391,7 @@ class Game {
         ui.bossArrow(ff - Math.atan2(dx, dz), ad);
       } else ui.bossArrow(null);
       ui.parry(p.parryT > 0);
-      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0); ui.fx('scopeFx', p.snipeT > 0); ui.fx('runFx', p.runT > 0);
+      ui.fx('frostFx', p.slowT > 0); ui.fx('cloakFx', p.cloakT > 0); ui.fx('warpFx', this.warpT > 0); ui.fx('rageFx', p.rageT > 0 || p.vampT > 0); ui.fx('scopeFx', p.snipeT > 0); ui.fx('runFx', p.runT > 0); ui.fx('stunFx', p.stunT > 0);
       ui.updateAbilities(p);
       if (this.net) {
         const players = 1 + [...this.remotes.values()].filter((r) => r.kind === 'player').length;
@@ -1277,6 +1416,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !win
 
 const game = new Game();
 window.game = game;
+window.__holesN = () => HOLES.n.value;
 window.Enemy = Enemy;
 
 // automated smoke test: open index.html?autotest  (runs ~30 simulated seconds of game logic)
@@ -1295,6 +1435,7 @@ if (location.search.includes("autotest")) {
     Enemy.prototype.shoot = function (pt, mode) { modes[mode] = (modes[mode] || 0) + 1; return os.call(this, pt, mode); };
     const od = game.deliverHit.bind(game);
     game.deliverHit = (id, h) => { hits[h.mode] = (hits[h.mode] || 0) + 1; return od(id, h); };
+    const HOLES_N = () => window.__holesN ? window.__holesN() : -1;
     const sim = (sec) => { for (let i = 0; i < sec * 60; i++) { game.time += 1 / 60; game.frame++; game.step(1 / 60); } };
     const aim = (pt) => { const e = p.eye(); const dx = pt.x - e.x, dy = pt.y - e.y, dz = pt.z - e.z; p.yaw = Math.atan2(-dx, -dz); p.pitch = Math.atan2(dy, Math.hypot(dx, dz)); sim(1 / 60); };
     sim(1);
@@ -1780,6 +1921,160 @@ if (location.search.includes("autotest")) {
         game.save.passive = {}; game.stats = computeStats(game.save.up, {}); p.hp = 100;
         r7.passives = P;
         log.round7 = r7;
+        // ================= round 8: buildings, gems, hook shop, Ground Grabber, Lightrope
+        try {
+          const r8 = {};
+          const W = game.world;
+          // ---- structures across a wide area
+          const kinds = {}; let shops = { normal: 0, passive: 0, hook: 0 }, hookShop = null;
+          for (let cx = -6; cx <= 6; cx++) for (let cz = -6; cz <= 6; cz++) for (const I of W.getData(cx, cz).islands) {
+            for (const d of I.deco) kinds[d.type] = (kinds[d.type] || 0) + 1;
+            if (I.boxes.some((b) => b.crate)) kinds.crates = (kinds.crates || 0) + 1;
+            if (I.boxes.some((b) => b.color === 0xb9a77f)) kinds.temple = (kinds.temple || 0) + 1;
+            if (I.boxes.some((b) => b.color === 0x8e2f24)) kinds.barn = (kinds.barn || 0) + 1;
+            if (I.shop) { shops[I.shop.type]++; if (I.shop.hook && !hookShop) hookShop = I.shop; }
+          }
+          r8.structures = kinds; r8.shops = shops;
+          // ---- gems from a boss
+          reset(); game.save.gems = 0;
+          const bq = c6.pointAt(0.5, 0.25); bq.y += 1;
+          const boss = new Enemy(game, bq, 'titan'); boss.think = 999; boss.wdT = 999; game.enemies.push(boss); sim(0.5);
+          boss.lastAttacker = { id: p.id, name: 'me', t: performance.now() }; boss.hp = 1;
+          boss.applyHit({ mode: 'latch', dmg: 5, attacker: p.id, aname: 'me' }); sim(0.1);
+          const gb = game.bags.find((b) => b.kind === 'gem');
+          r8.bossGems = { bag: gb ? gb.n : 0 };
+          if (gb) { p.pos.copy(gb.pos); sim(0.3); }
+          r8.bossGems.picked = game.save.gems;
+          game.loot.forEach((L) => { game.scene.remove(L.gem, L.beam); }); game.loot = [];
+          game.enemies.forEach((e) => { e.dead = true; e.dispose(); }); game.enemies = [];
+          // ---- hook shop UI + buying
+          game.save.coins = 10000; game.save.gems = 15; game.save.hooks = {};
+          game.shopMode = 'hook'; game.ui.renderShop();
+          r8.hookShopRows = document.querySelectorAll('#shopList .hookrow').length;
+          game.buyHook('grabber'); const afterG = { gems: game.save.gems, coins: game.save.coins, sel: game.hookKind() };
+          game.buyHook('lightrope'); r8.buy = { afterGrabber: afterG, afterLight: { gems: game.save.gems, coins: game.save.coins, sel: game.hookKind() }, tooPoor: (() => { game.save.hooks = {}; game.save.gems = 3; game.buyHook('lightrope'); return !game.save.hooks.lightrope; })() };
+          game.save.hooks = { grabber: true, lightrope: true }; game.save.gems = 0;
+          game.shopMode = 'normal'; game.ui.renderShop();
+          game.equipHook('normal', true); game.cycleHook(); const c1 = game.hookKind(); game.cycleHook(); const c2 = game.hookKind(); game.cycleHook(); r8.cycle = [c1, c2, game.hookKind()];
+          r8.gunVariant = game.gun.variant;
+          // ---- GROUND GRABBER: dig the ground under our feet
+          game.equipHook('grabber', true);
+          reset(); { const da = c6.pointAt(2.4, 0.5); p.pos.set(da.x, da.y + 0.3, da.z); p.vel.set(0, 0, 0); sim(0.3); } p.pitch = -1.2; p.yaw = 0.3; sim(0.05);
+          const tBefore = (() => { const f0 = p.forward(); const h0 = W.raycast(game.camera.position, f0, 40); return h0 ? h0.point.clone() : null; })();
+          p.shoot(); sim(1.2);
+          const dug = W.holes.length, holdDig = p.held ? p.held.look : null;
+          let groundDrop = null;
+          if (tBefore && dug) { const I0 = W.islandsNear(tBefore.x, tBefore.z, 0)[0]; const s0 = I0 && I0.sample(tBefore.x, tBefore.z); groundDrop = s0 ? +(tBefore.y - s0.top).toFixed(2) : 'through'; }
+          r8.dig = { holes: dug, held: holdDig, groundLoweredBy: groundDrop, holeUniforms: (W.updateHoles(game.camera.position), HOLES_N()) };
+          // throw it at an enemy: stun + damage, then it lands as a block
+          r8.dig.fellIntoOwnPit = p.pos.y < c6.pointAt(2.4, 0.5).y - 0.8;
+          reset(); const o20 = clearOff(18); const te = new Enemy(game, p.pos.clone().add(o20), 'brute'); te.think = 999; te.wdT = 999; game.enemies.push(te); sim(0.3);
+          const tc = te.pos.clone(); tc.y += 1.2; aim(tc);
+          const placed0 = W.placed.length;
+          p.shoot(); let stunSeen = 0; for (let i = 0; i < 90; i++) { sim(1 / 60); stunSeen = Math.max(stunSeen, te.stunT); }
+          sim(2);
+          r8.throw = { dmg: 160 - te.hp, stun: +stunSeen.toFixed(2), heldAfter: !!p.held, placed: W.placed.length - placed0, flying: game.grab.flying.length };
+          const blk = W.placed[W.placed.length - 1];
+          if (blk) {
+            // the block is solid: stand on it
+            p.pos.set(blk.x, blk.y + blk.sy / 2 + 2, blk.z); p.vel.set(0, 0, 0); sim(0.6);
+            r8.throw.standOnBlock = Math.abs(p.pos.y - (blk.y + blk.sy / 2)) < 0.1 && p.onGround;
+            // grab the block again
+            reset(); const bc = new THREE.Vector3(blk.x, blk.y, blk.z); aim(bc); p.shoot(); sim(1.5);
+            r8.throw.regrab = { held: !!p.held, placedLeft: W.placed.indexOf(blk) };
+            if (p.held) p.cancel(); sim(0.2);
+            r8.throw.dropQ = { held: !!p.held, placed: W.placed.length };
+          }
+          te.dead = true; te.dispose(); game.enemies = [];
+          // rip a chunk out of a wall
+          let wall = null, wallI = null;
+          for (const I of W.islandsInRadius(p.pos.x, p.pos.z, 400)) { if (I.kind === 'spawn') continue; const b = I.boxes.find((b) => !b.noGrab && b.sy > 3 && (b.sx > 3 || b.sz > 3)); if (b) { wall = b; wallI = I; break; } }
+          if (wall) {
+            const n0 = wallI.boxes.length;
+            const side = wall.sx > wall.sz ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+            const at = new THREE.Vector3(wall.x, wall.y, wall.z);
+            const hit = W.raycast(at.clone().addScaledVector(side, 8), side.clone().negate(), 12);
+            const before = JSON.stringify([wall.x, wall.y, wall.z]);
+            const piece = hit && hit.type === 'box' ? game.grab.rip(hit, side.clone().negate(), p) : null;
+            r8.wall = { hitType: hit && hit.type, piece: piece ? [piece.sx, piece.sy, piece.sz].map((v) => +v.toFixed(2)) : null, boxesBefore: n0, boxesAfter: wallI.boxes.length, stillThere: wallI.boxes.some((b) => JSON.stringify([b.x, b.y, b.z]) === before) };
+            if (piece) game.grab.dispose(piece);
+          }
+          // uproot a tree
+          let tree = null, treeI = null;
+          for (const I of W.islandsInRadius(p.pos.x, p.pos.z, 300)) { if (I.kind === 'spawn') continue; const t = I.trees.find((t) => !t.gone); if (t) { tree = t; treeI = I; break; } }
+          if (tree) {
+            const from = new THREE.Vector3(tree.x + 6, tree.y + tree.h * 0.4, tree.z);
+            const hit = W.raycast(from, new THREE.Vector3(-1, 0, 0), 10);
+            const piece = hit && hit.type === 'tree' ? game.grab.rip(hit, new THREE.Vector3(-1, 0, 0), p) : null;
+            const again = W.raycast(from, new THREE.Vector3(-1, 0, 0), 10);
+            r8.tree = { ripped: !!piece, gone: tree.gone, look: piece && piece.look, rayNowHits: again ? again.type : null };
+            if (piece) game.grab.dispose(piece);
+          }
+          // safe zone and shops are protected
+          { const sp = W.getData(0, 0).islands[0]; const h0 = W.raycast(new THREE.Vector3(sp.x + 3, sp.y + 20, sp.z + 3), new THREE.Vector3(0, -1, 0), 40); r8.safeProtected = !W.canGrab(h0); }
+          // edits travel over the network: a remote dig + a late-join log replay
+          const nh0 = W.holes.length;
+          const anyI = W.islandsInRadius(p.pos.x, p.pos.z, 200).find((I) => I.kind === 'island' && I !== c6);
+          if (anyI) {
+            const q = anyI.pointAt(1, 0.3);
+            game.onNet({ t: 'wed', op: { id: 'peerX-e1', o: 'dig', I: anyI.id, x: q.x, y: q.y, z: q.z, r: 2.3 } });
+            game.onNet({ t: 'wed', op: { id: 'peerX-e1', o: 'dig', I: anyI.id, x: q.x, y: q.y, z: q.z, r: 2.3 } });
+            game.onNet({ t: 'wlog', ops: [{ id: 'peerX-e2', o: 'place', pid: 'peerX-pc1', x: q.x, y: q.y + 3, z: q.z, sx: 2, sy: 2, sz: 2, look: 'dirt', color: 0x6e5136, surf: 0 }] });
+            game.onNet({ t: 'throw', id: 'peerX-pc9', x: q.x, y: q.y + 30, z: q.z, vx: 0, vy: 0, vz: 0, sx: 1, sy: 1, sz: 1, look: 'rock', color: 0x777777, surf: 0, owner: 'peerX', oname: 'X' });
+            r8.net = { remoteHoles: W.holes.length - nh0, remotePlaced: W.placed.some((b) => b.id === 'peerX-pc1'), remoteFlying: game.grab.flying.some((x) => x.id === 'peerX-pc9'), logged: game.editLog.length };
+            game.grab.landedRemote('peerX-pc9');
+          }
+          // grabber blocks Snipe / Swap
+          game.save.abil.snipe = true; reset(); r8.snipeBlocked = p.useAbility('snipe') === false;
+          // ---- LIGHTROPE: swing on a wall rope
+          game.equipHook('lightrope', true);
+          reset();
+          let anchorOk = false;
+          for (let a = 0; a < 6.3 && !anchorOk; a += 0.3) {
+            p.yaw = a; p.pitch = 0.35; sim(1 / 60);
+            const hh = W.raycast(game.camera.position, p.forward(), 60);
+            if (hh && hh.dist > 8) anchorOk = true;
+          }
+          if (!anchorOk) { p.pitch = -0.5; }
+          p.shoot(); sim(0.8);
+          const lr = { state: p.hook.state, L: p.hook.L && +p.hook.L.toFixed(1) };
+          if (p.hook.state === 2) {
+            // walk/fall away: the rope never gets longer than L
+            let maxD = 0; p.vel.set(0, 0, 0);
+            for (let i = 0; i < 120; i++) { p.vel.x += Math.sin(p.yaw) * 2; p.vel.z += Math.cos(p.yaw) * 2; sim(1 / 60); _v.copy(p.pos); _v.y += 0.8; maxD = Math.max(maxD, _v.distanceTo(p.hook.anchor)); }
+            lr.maxDist = +maxD.toFixed(2); lr.held = p.hook.state === 2;
+            p.shoot(); sim(0.1); lr.pulled = p.hook.state === 0 && p.vel.length() > 10;
+          }
+          r8.lightWall = lr;
+          // tie an enemy to us: it can't run away, yank keeps it on a short leash
+          for (const b of [...W.placed]) W.applyOp({ o: 'unplace', pid: b.id });
+          reset(); p.hook.state = 0;
+          const le = new Enemy(game, p.pos.clone().add(clearOff(14)), 'grappler'); le.think = 999; le.wdT = 999; le.cool = 999; game.enemies.push(le); sim(0.3);
+          const lc = le.pos.clone(); lc.y += 1.2; aim(lc); p.shoot(); sim(0.5);
+          const lat = { state: p.hook.state, L: p.hook.L && +p.hook.L.toFixed(1), dmg: 60 - le.hp };
+          let far = 0;
+          for (let i = 0; i < 90; i++) { _v.subVectors(le.pos, p.pos).setY(0).normalize(); le.vel.x = _v.x * 12; le.vel.z = _v.z * 12; sim(1 / 60); far = Math.max(far, le.pos.distanceTo(p.pos)); }
+          lat.maxEnemyDist = +far.toFixed(1);
+          p.shoot(); sim(0.6); lat.afterYank = { state: p.hook.state, L: p.hook.L, dist: +le.pos.distanceTo(p.pos).toFixed(1) };
+          p.cancel(); sim(0.5); lat.released = p.hook.state === 0;
+          r8.lightEnemy = lat;
+          le.dead = true; le.dispose(); game.enemies = [];
+          // being tied up by another player's Lightrope (network message)
+          reset(); const a0 = p.pos.clone().add(new THREE.Vector3(5, 0, 0));
+          for (let i = 0; i < 30; i++) { game.onNet({ t: 'hit', target: p.id, mode: 'tether', a: a0.toArray(), L: 5, attacker: 'peerX', aname: 'X' }); p.vel.set(-15, 0, 0); sim(1 / 30); }
+          r8.tetheredByPlayer = +p.pos.distanceTo(a0).toFixed(1);
+          // stun on the player
+          reset(); p.applyHit({ mode: 'bump', dmg: 5, d: [1, 0, 0], k: 0.1, stun: 1, attacker: 'x', aname: 'X' }); const stunShoot = (p.shoot(), p.hook.state); r8.playerStun = { stunT: +p.stunT.toFixed(2), couldShoot: stunShoot !== 0 }; sim(1.2); r8.playerStun.after = +p.stunT.toFixed(2);
+          // PvP gem drop
+          reset(); game.remotes.set('peerX', { kind: 'player', id: 'peerX', name: 'X', dead: false, pos: new THREE.Vector3(), dispose() {}, update() {}, lastSeen: performance.now() + 1e9, model: { hit() {} } });
+          const gb0 = game.bags.filter((b) => b.kind === 'gem').length;
+          p.lastAttacker = { id: 'peerX', name: 'X', t: performance.now() }; p.die('test');
+          r8.pvpGems = game.bags.filter((b) => b.kind === 'gem').length - gb0;
+          game.remotes.delete('peerX'); p.respawn();
+          game.equipHook('normal', true); game.save.hooks = {}; game.save.gems = 0;
+          r8.hud = { gemText: document.getElementById('gemText').textContent, hookName: document.getElementById('hookName').textContent };
+          log.round8 = r8;
+        } catch (err) { log.round8 = 'ERR ' + err.stack; }
         // music: render 6 s offline and measure it
         try {
           const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;

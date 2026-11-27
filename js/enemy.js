@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { integrate, launchTo, wallClimb } from './entity.js';
+import { integrate, launchTo, wallClimb, applyTether } from './entity.js';
 import { KILL_Y, SAFE_RADIUS, SPAWN } from './world.js';
 import { makeCharacter, makeHookHead, Rope } from './models.js';
 import { HOOK } from './player.js';
@@ -46,7 +46,7 @@ export class Enemy {
     this.travelCool = 4 + Math.random() * 8;
     this.moveTarget = null; this.running = false; this.wanderT = 0; this.moving = false;
     // status + anti-stuck bookkeeping
-    this.frozenT = 0; this.pounceT = 0; this.pounceAir = false; this.fuseT = 0;
+    this.frozenT = 0; this.stunT = 0; this.tether = null; this.pounceT = 0; this.pounceAir = false; this.fuseT = 0; this.gyT = 0; this.gy = null;
     this.wdT = 2; this.wdPos = this.pos.clone(); this.stuckN = 0; this.noLosT = 0; this.airStillT = 0; this.lastLos = null;
   }
 
@@ -66,16 +66,24 @@ export class Enemy {
     if (this.dead) return;
     this.cool -= dt; this.slamCool -= dt; this.specialCool -= dt;
     if (this.pulseN > 0) { this.pulseT -= dt; if (this.pulseT <= 0) { this.pulseT = 1; this.pulseN--; this.game.enemyMagnet(this, 45); } } this.think -= dt; this.climbT -= dt; this.bumpCool -= dt; this.travelCool -= dt; this.wanderT -= dt;
-    const frozen = this.frozenT > 0;
+    const frozen = this.frozenT > 0 || this.stunT > 0;
     if (frozen) {
-      this.frozenT -= dt; this.moving = false; this.moveTarget = null;
+      const stun = this.stunT > 0;
+      if (this.frozenT > 0) this.frozenT -= dt;
+      if (stun) this.stunT -= dt;
+      this.moving = false; this.moveTarget = null;
       if (this.onGround) { this.vel.x *= 0.85; this.vel.z *= 0.85; }
-      if (Math.random() < dt * 8) { this.center(_a); _a.x += (Math.random() - 0.5) * this.scale; _a.z += (Math.random() - 0.5) * this.scale; this.game.particles.burst(_a, 0xbfefff, 2, 2, 0.2); }
+      if (Math.random() < dt * 8) {
+        this.center(_a);
+        if (stun) { _a.y += 0.9 * this.scale; this.game.particles.burst(_a, 0xffe14a, 2, 2.5, 0.18); }
+        else { _a.x += (Math.random() - 0.5) * this.scale; _a.z += (Math.random() - 0.5) * this.scale; this.game.particles.burst(_a, 0xbfefff, 2, 2, 0.2); }
+      }
     } else {
       if (this.think <= 0) { this.think = 0.25 + Math.random() * 0.35; this.decide(); }
       this.move(dt);
     }
     integrate(this, dt, this.game.world);
+    if (this.tether && this.tether.t > 0) { this.tether.t -= dt; applyTether(this, this.tether.a, this.tether.L, 0.8 * this.scale); }
     if (!this.onGround && !this.inWater && this.vel.lengthSq() < 4) this.airStillT += dt; else this.airStillT = 0;
     // scramble up walls while chasing (bigger bodies reach higher)
     if (this.hitWall && this.moveTarget) this.climbT = Math.max(this.climbT, 0.3);
@@ -101,6 +109,8 @@ export class Enemy {
     m.group.rotation.y = this.yaw;
     m.setHp(this.hp / this.maxHp);
     m.update(dt, this.game.camera, this.moving, this.pitch);
+    if (this.onGround) m.setGround(0);
+    else { this.gyT -= dt; if (this.gyT <= 0) { this.gyT = 0.15; this.gy = this.game.world.groundAt(this.pos.x, this.pos.y + 0.3, this.pos.z); } m.setGround(this.gy === null ? null : this.pos.y - this.gy); }
     const h = this.hook;
     m.gunHead.visible = h.state === HOOK.IDLE;
     if (h.state !== HOOK.IDLE) {
@@ -439,10 +449,21 @@ export class Enemy {
 
   applyHit(hit) {
     if (this.dead) return;
+    if (hit.mode === 'tether') {
+      if (!Array.isArray(hit.a) || !(hit.L > 0)) return;
+      this.tether = this.tether || { a: new V(), L: 0, t: 0 };
+      this.tether.a.fromArray(hit.a); this.tether.L = Math.max(2, +hit.L); this.tether.t = 0.45;
+      return;
+    }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
     this.hp -= hit.dmg || 0;
     this.model.hit();
     this.cool = Math.min(this.cool, 0.6);
+    if (hit.stun) {
+      this.stunT = Math.max(this.stunT, this.T.boss ? hit.stun * 0.4 : hit.stun);
+      this.moveTarget = null; this.fuseT = 0;
+      if (this.hook.state === HOOK.FLYING) this.hook.state = HOOK.RETRACT;
+    }
     if (hit.freeze) {
       this.frozenT = Math.max(this.frozenT, this.T.boss ? hit.freeze * 0.4 : hit.freeze);
       this.moveTarget = null; this.fuseT = 0;

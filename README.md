@@ -27,6 +27,7 @@ Open the GitHub Pages link in Chrome or Edge (PC or Android) and press **📲 In
 | Shoot hook → **Pull** | left click (or F) | SHOOT → PULL button |
 | Cancel hook | right click / Q | ✕ button |
 | Shop (when near one) | E | SHOP button |
+| Switch grappling hook | Tab / mouse wheel | 🪝 button |
 | Abilities | keys 1–9, 0, R, T Y U I O P G H J K, boss drops C V B N Z (or click the icons) | ability buttons at the bottom |
 | Mute | M | |
 
@@ -138,6 +139,22 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | 🏆 Bounty Hunter | 2500 | +25 coins per kill (+150 for bosses) |
 | 💢 Adrenaline | 3000 | Below 30% health: 40% faster and 50% more damage |
 
+## Gems and grappling hooks
+
+**💎 Gems** drop from every boss (10, follow the cyan beam) and from players you take out online (2). Spend them at the very rare black-and-yellow **HOOK SHOP** (striped roof, "🪝 HOOKS" sign, a giant claw spinning over it). A yellow-black arrow at the top points to the nearest one. Bought hooks are kept forever; switch with Tab / mouse wheel (🪝 button on phones).
+
+| Hook | Cost | Look | What it does |
+|---|---|---|---|
+| 🪝 Standard Hook | free | steel hook, blue glow | grapple, pull, yank |
+| 🟨 **GROUND GRABBER** | 💎 10 + 🪙 2500 | big striped yellow-and-black claw | Rips a chunk out of whatever it hits: digs holes in the ground, tears pieces out of walls, uproots trees and boulders, picks up blocks. Click again to **throw** it: it **stuns** (2.2 s) and hurts whoever it hits, smashes through walls and lands as a solid block, so you can wall in your friends or build cover. Q puts it down in front of you. Its claw also stuns people it hits. It can't grapple you anywhere, and Snipe, Swap Shot, Hook Bomb, Super Leap shots, Explosive Hook, Burning Hook, Long Arm and Turbo Pull don't work with it. Nothing can be ripped out of the safe zone or shops. |
+| 🪢 **LIGHTROPE HOOK** | 💎 5 + 🪙 3500 | small grey hook, black prongs, thin loose rope | The rope is loose and holds on to anything until you **pull**. Hook a wall and swing like a pendulum. Hook an enemy or a player and they are tied to you: they can't get further away than the rope (a boss is too heavy and drags you instead). Click to pull: you zoom to the wall, or you yank them in and keep them on a short 4.5 m leash. Q lets go. Snipe doesn't work with it. |
+
+Everything the Ground Grabber changes (holes, ripped walls, thrown blocks) is shared with everyone in the room, including players who join later.
+
+## Buildings
+
+Islands now have castles (walls, gate, corner towers and a keep), windmills with turning sails, lighthouses with rotating beams, watchtowers with ladders, sandstone temples, barns, villages with a well, crate stacks and giant cube statues, as well as the old ruins, houses, towers and arches.
+
 ## Music
 
 A fast (150 BPM), epic soundtrack is generated live in the browser: drums, bass, arpeggios, pads and lead melodies in D minor, about 2.5 minutes per pass through intro, verses, choruses, a breakdown and a build. Each time it loops it writes new melodies, so it doesn't repeat exactly. Set the **Music volume** in the menu or pause menu; **M** mutes all sound.
@@ -167,6 +184,8 @@ Killing a boss drops a golden gem with a gold light beam. Walk into it to unlock
 ## Graphics
 
 Pick **High** (shadows, longer view distance) or **Low** (for phones) in the menu. Phones default to Low.
+
+Realism details (characters and enemies are still cubes): stone blocks, wood planks and roof shingles on buildings with real bumpy lighting, bare rock on steep slopes, softened cube edges, soft contact shadows under everyone, ropes that hang when they are slack, warmer sunlight, head bob, a camera dip and dust when you land, and dust from your feet when you run.
 
 ## Dev hooks
 

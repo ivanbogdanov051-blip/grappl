@@ -28,17 +28,18 @@
   <div id="whiteout"></div>
   <div id="hurt"></div>
   <div id="shieldFx"></div>
-  <div id="parryFx"></div><div id="frostFx" class="sfx"></div><div id="cloakFx" class="sfx"></div><div id="warpFx" class="sfx"></div><div id="rageFx" class="sfx"></div><div id="runFx" class="sfx"></div><div id="scopeFx" class="sfx"><div class="scopeX"></div></div>
+  <div id="parryFx"></div><div id="frostFx" class="sfx"></div><div id="cloakFx" class="sfx"></div><div id="warpFx" class="sfx"></div><div id="rageFx" class="sfx"></div><div id="runFx" class="sfx"></div><div id="scopeFx" class="sfx"><div class="scopeX"></div></div><div id="stunFx" class="sfx"></div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
     <div id="topLeft">
       <div id="hpBar"><div id="hpFill"></div><span id="hpText">100</span></div>
       <div id="coins">🪙 <span id="coinText">0</span></div>
+      <div id="gems">💎 <span id="gemText">0</span></div>
       <div id="speedo"></div>
     </div>
     <div id="topCenter">
-      <div class="arrows"><div id="shopArrowWrap" class="hidden"><div id="shopArrow">▲</div><span id="shopDist"></span></div><div id="passArrowWrap" class="hidden"><div id="passArrow">▲</div><span id="passDist"></span></div><div id="bossArrowWrap" class="hidden"><div id="bossArrow">▲</div><span id="bossDist"></span></div></div>
+      <div class="arrows"><div id="shopArrowWrap" class="hidden"><div id="shopArrow">▲</div><span id="shopDist"></span></div><div id="passArrowWrap" class="hidden"><div id="passArrow">▲</div><span id="passDist"></span></div><div id="hookArrowWrap" class="hidden"><div id="hookArrow">▲</div><span id="hookDist"></span></div><div id="bossArrowWrap" class="hidden"><div id="bossArrow">▲</div><span id="bossDist"></span></div></div>
       <div id="safeTag" class="hidden">🛡️ SAFE ZONE</div>
       <div id="bossBar" class="hidden"><div id="bossName"></div><div class="bb"><div id="bossFill"></div></div></div>
     </div>
@@ -49,11 +50,12 @@
     <div id="crosshair"><div class="ring"></div><div class="dot"></div></div>
     <div id="hitmark">✕</div>
     <div id="hookState"></div>
+    <div id="hookName" class="hidden"></div>
     <div id="abilities"></div>
     <div id="rareAbilities"></div>
     <div id="toast"></div>
     <div id="shopPrompt" class="hidden">Press <b>E</b> to open the shop</div>
-    <div id="help" class="desktop-only">WASD move · Shift run · Space jump · <b>Click</b> shoot / pull · <b>Right-click / Q</b> cancel · <b>ability keys</b> shown on each button · E shop · M mute</div>
+    <div id="help" class="desktop-only">WASD move · Shift run · Space jump · <b>Click</b> shoot / pull · <b>Right-click / Q</b> cancel · <b>Tab / wheel</b> switch hook · <b>ability keys</b> shown on each button · E shop · M mute</div>
   </div>
 
   <!-- Touch controls -->
@@ -62,6 +64,7 @@
     <div id="stickBase"><div id="stickKnob"></div></div>
     <button id="btnShoot" class="tbtn big">SHOOT</button>
     <button id="btnCancel" class="tbtn hidden">✕</button>
+    <button id="btnHook" class="tbtn hidden">🪝</button>
     <button id="btnJump" class="tbtn">JUMP</button>
     <button id="btnRun" class="tbtn">RUN</button>
     <button id="btnShop" class="tbtn hidden">🛒 SHOP</button>
@@ -98,6 +101,7 @@
           <li>Fall into the clouds and you respawn at the safe spawn island after 5 seconds.</li>
           <li>Shops also sell <b>abilities</b> (Swap Shot, Super Leap, Dash, Shockwave, Rewind, Magnet, Shield, Glide, Hook Bomb, Heal) and the legendary <b>PARRY</b>. Each gets its own button.</li>
           <li>Collect 🪙 coins and find the rare <b>SHOP</b> on big islands (follow the arrow at the top) for grapple upgrades.</li>
+          <li>Bosses drop <b>💎 10 gems</b> (players you take out drop 2). Spend them at the very rare black-and-yellow <b>HOOK SHOP</b> on new grappling hooks: the <b>GROUND GRABBER</b> rips chunks out of the ground and walls and throws them (stun!), the <b>LIGHTROPE</b> ties anything to you with a loose rope and lets you swing. Switch hooks with <b>Tab</b> / mouse wheel (🪝 button on phones).</li>
           <li>Online is free-for-all with friendly fire. You are <b style="color:#5aa0ff">blue</b>, other players glowing <b style="color:#5fe07a">green</b> (visible through walls), enemies <b style="color:#ff6b6b">red</b>.</li>
         </ul>
       </details>

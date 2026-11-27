@@ -1,4 +1,4 @@
-import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES, abilityKey, PASSIVES } from './upgrades.js';
+import { UPGRADES, COSTS, MAX_LEVEL, ABILITIES, abilityKey, PASSIVES, HOOKS, HOOK_DEF } from './upgrades.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,6 +15,9 @@ export class UI {
       el.oninput = () => {
         game.save.sens = Math.round(parseFloat(el.value) * 10) / 10;
         this.syncSens();
+        game.persist();
+      };
+    }
     for (const id of ['musicVol', 'musicVol2']) {
       $(id).value = Math.round((game.save.musicVol ?? 0.5) * 100);
       $(id).oninput = (e) => {
@@ -25,9 +28,7 @@ export class UI {
         game.persist();
       };
     }
-    for (const o of ['musicVal', 'musicVal2']) $(o).textContent = Math.round((game.save.musicVol ?? 0.5) * 100) + '%'; game.persist();
-      };
-    }
+    for (const o of ['musicVal', 'musicVal2']) $(o).textContent = Math.round((game.save.musicVol ?? 0.5) * 100) + '%';
     for (const id of ['invertY', 'invertY2']) {
       $(id).checked = !!game.save.invertY;
       $(id).onchange = (e) => { game.save.invertY = e.target.checked; this.syncSens(); game.persist(); };
@@ -73,20 +74,41 @@ export class UI {
     if (v && this.g.input && this.g.input.resetTouch) this.g.input.resetTouch();
   }
 
-  setHook(st) {
-    if (st === this._hs) return;
-    this._hs = st;
+  setHook(st, kind = 'normal', held = false) {
+    const key = st + kind + held;
+    if (key === this._hs) return;
+    this._hs = key;
     const b = $('btnShoot');
     const pull = st === 2 || st === 3;
-    b.textContent = pull ? (st === 3 ? 'YANK' : 'PULL') : st === 1 ? '• • •' : 'SHOOT';
-    b.classList.toggle('pull', pull);
-    b.classList.toggle('busy', st === 1 || st === 4);
-    $('btnCancel').classList.toggle('hidden', !(st === 1 || pull));
-    const tips = this.touch
-      ? ['', 'Hook flying…', 'Hooked! Tap PULL to launch · ✕ to cancel', 'Got one! Tap YANK to pull them in', '']
-      : ['', 'Hook flying…', 'Hooked! Click to PULL · Right-click / Q to cancel', 'Got one! Click to YANK them · Q to let go', ''];
-    $('hookState').textContent = tips[st] || '';
-    $('hookState').classList.toggle('pull', pull);
+    const light = kind === 'lightrope', grab = kind === 'grabber';
+    b.textContent = held ? 'THROW' : pull ? (st === 3 ? 'YANK' : 'PULL') : st === 1 || st === 4 ? '• • •' : grab ? 'GRAB' : 'SHOOT';
+    b.classList.toggle('pull', pull || held);
+    b.classList.toggle('busy', !held && (st === 1 || st === 4));
+    $('btnCancel').classList.toggle('hidden', !(st === 1 || pull || held));
+    const T = this.touch;
+    let tip = ['', 'Hook flying…', T ? 'Hooked! Tap PULL to launch · ✕ to cancel' : 'Hooked! Click to PULL · Right-click / Q to cancel', T ? 'Got one! Tap YANK to pull them in' : 'Got one! Click to YANK them · Q to let go', ''][st] || '';
+    if (light && st === 2) tip = T ? '🪢 Swinging on the rope · PULL to zoom in · ✕ lets go' : '🪢 Swing on the rope! Click to PULL yourself in · Q lets go';
+    if (light && st === 3) tip = T ? '🪢 Tied up! YANK to drag them in · ✕ lets go' : '🪢 They\'re tied to you! Click to YANK · Q lets go';
+    if (held) tip = T ? '🟨 Holding a chunk · THROW it · ✕ puts it down' : '🟨 Holding a chunk · Click to THROW · Q to put it down';
+    $('hookState').textContent = tip;
+    $('hookState').classList.toggle('pull', pull || held);
+  }
+  hookLabel(kind, owned) {
+    const H = HOOK_DEF[kind] || HOOK_DEF.normal;
+    const el = $('hookName');
+    el.textContent = `${H.icon} ${H.name}${owned > 1 ? (this.touch ? '' : '  ·  Tab to switch') : ''}`;
+    el.className = 'hk-' + kind;
+    el.classList.toggle('hidden', owned < 2 && kind === 'normal');
+    const b = $('btnHook');
+    b.classList.toggle('hidden', owned < 2);
+    b.textContent = H.icon;
+  }
+  hookArrow(angle, dist) {
+    const w = $('hookArrowWrap');
+    if (angle === null) { w.classList.add('hidden'); return; }
+    w.classList.remove('hidden');
+    $('hookArrow').style.transform = `rotate(${angle}rad)`;
+    $('hookDist').textContent = `HOOKS ${Math.round(dist)}m`;
   }
 
   hud(p, g) {
@@ -94,6 +116,7 @@ export class UI {
     $('hpFill').style.width = Math.max(0, (p.hp / max) * 100) + '%';
     $('hpText').textContent = `${Math.max(0, Math.ceil(p.hp))} / ${max}`;
     $('coinText').textContent = g.save.coins;
+    $('gemText').textContent = g.save.gems || 0;
     $('speedo').textContent = `${Math.round(p.vel.length())} m/s · alt ${Math.round(p.pos.y)}m`;
     $('safeTag').classList.toggle('hidden', !p.safe);
     $('shieldFx').style.opacity = p.shieldT > 0 ? 1 : 0;
@@ -127,10 +150,12 @@ export class UI {
     $('passArrow').style.transform = `rotate(${angle}rad)`;
     $('passDist').textContent = `PASSIVES ${Math.round(dist)}m`;
   }
-  shopPrompt(v, passive) {
+  shopPrompt(v, type) {
     $('shopPrompt').classList.toggle('hidden', !v);
-    if (v) $('shopPrompt').innerHTML = this.touch ? (passive ? 'Tap ✦ PASSIVES to open the Passive Shop' : 'Tap 🛒 SHOP to open the shop') : (passive ? 'Press <b>E</b> to open the Passive Shop' : 'Press <b>E</b> to open the shop');
-    $('btnShop').textContent = passive ? '✦ PASSIVES' : '🛒 SHOP';
+    const name = type === 'passive' ? 'the Passive Shop' : type === 'hook' ? 'the Hook Shop' : 'the shop';
+    const btn = type === 'passive' ? '✦ PASSIVES' : type === 'hook' ? '🪝 HOOKS' : '🛒 SHOP';
+    if (v) $('shopPrompt').innerHTML = this.touch ? `Tap ${btn} to open ${name}` : `Press <b>E</b> to open ${name}`;
+    $('btnShop').textContent = btn;
     $('btnShop').classList.toggle('hidden', !v);
   }
   crosshair(cls) {
@@ -226,12 +251,40 @@ export class UI {
   closeShop() { $('shop').classList.add('hidden'); }
   renderShop() {
     const g = this.g;
-    $('shopCoins').textContent = `🪙 ${g.save.coins} coins`;
+    $('shopCoins').textContent = `🪙 ${g.save.coins} coins  ·  💎 ${g.save.gems || 0} gems`;
     const list = $('shopList');
     list.innerHTML = '';
-    const passive = g.shopMode === 'passive';
-    $('shopTitle').textContent = passive ? '✦ Passive Shop' : '🛒 Grapple Shop';
+    const passive = g.shopMode === 'passive', hookShop = g.shopMode === 'hook';
+    $('shopTitle').textContent = passive ? '✦ Passive Shop' : hookShop ? '🪝 Hook Shop' : '🛒 Grapple Shop';
     $('shop').classList.toggle('passive', passive);
+    $('shop').classList.toggle('hookshop', hookShop);
+    if (hookShop) {
+      const h = document.createElement('h3');
+      h.textContent = 'Grappling hooks: paid with 💎 GEMS + coins. Bosses drop 10 gems, players you take out drop 2.';
+      list.appendChild(h);
+      const cur = g.hookKind();
+      for (const H of HOOKS) {
+        const owned = H.key === 'normal' || !!(g.save.hooks || {})[H.key];
+        const row = document.createElement('div');
+        row.className = 'upg hookrow hk-' + H.key;
+        const cost = H.key === 'normal' ? 'Free' : `💎 ${H.gems} + 🪙 ${H.cost}`;
+        row.innerHTML = `<div class="uinfo"><div class="un">${H.icon} ${H.name} <span class="pips">${cost}</span></div><div class="ud"><i>${H.design}.</i> ${H.desc}${H.no ? `<br><span class="hkno">Doesn't work with: ${H.no}</span>` : ''}</div></div>`;
+        const b = document.createElement('button');
+        if (owned) {
+          b.textContent = cur === H.key ? '✓ EQUIPPED' : 'EQUIP';
+          b.disabled = cur === H.key;
+          b.onclick = () => g.equipHook(H.key);
+        } else {
+          b.textContent = 'BUY';
+          b.disabled = (g.save.gems || 0) < H.gems || g.save.coins < H.cost;
+          b.title = b.disabled ? `Needs ${H.gems} gems and ${H.cost} coins` : '';
+          b.onclick = () => g.buyHook(H.key);
+        }
+        row.appendChild(b);
+        list.appendChild(row);
+      }
+      return;
+    }
     if (passive) {
       const h = document.createElement('h3');
       h.textContent = 'Passives: buy once, always active. No button needed.';
@@ -252,7 +305,7 @@ export class UI {
     }
     const hint = document.createElement('div');
     hint.className = 'shopHint';
-    hint.textContent = '✦ Passives (like RUNNER) are sold in the rare purple PASSIVE SHOPS. Follow the purple arrow at the top.';
+    hint.textContent = '✦ Passives (like RUNNER) are sold in the rare purple PASSIVE SHOPS. 🪝 New grappling hooks (paid with 💎 gems from bosses) are sold in the even rarer black-and-yellow HOOK SHOPS. Follow the arrows at the top.';
     list.appendChild(hint);
     for (const u of UPGRADES) {
       const lv = g.save.up[u.key] || 0;

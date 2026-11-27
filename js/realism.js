@@ -33,21 +33,83 @@ export function getDetailTexture() {
   return detailTex;
 }
 
-// Adds world-space surface detail (grain, speckle, strata) to a vertex-coloured material.
-export function applyDetail(mat, strength = 0.45) {
+// Dug holes: spheres of removed ground. Terrain (and grass) inside them is cut away in the shader,
+// and every hole gets a dirt "bowl" mesh. The nearest MAX_HOLES are sent to the GPU.
+export const MAX_HOLES = 24;
+export const HOLES = { list: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector4(0, -1e5, 0, 0)) }, n: { value: 0 } };
+const HOLE_GLSL = `uniform vec4 uHoles[${MAX_HOLES}]; uniform int uHoleN;`;
+const holeTest = (p, k) => `for (int i = 0; i < ${MAX_HOLES}; i++) { if (i >= uHoleN) break; vec4 hh = uHoles[i]; if (${p}.y < hh.y + 0.02 && distance(${p}, hh.xyz) < hh.w * ${k}) discard; }`;
+
+// Adds world-space surface detail to a vertex-coloured material:
+//  - colour grain + speckle + strata
+//  - matching bump (so light catches the grain: much more "real" than flat colour)
+//  - optional procedural bricks / planks / roof shingles chosen by a per-vertex `surf` attribute
+//  - optional cut-outs where the ground has been dug away
+export function applyDetail(mat, strength = 0.45, o = {}) {
   const tex = getDetailTexture();
+  const bump = o.bump ?? 1, bricks = !!o.bricks, holes = !!o.holes, holeK = o.holeK || 0.97;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uDetail = { value: tex };
-    sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform sampler2D uDetail;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    if (holes) { sh.uniforms.uHoles = HOLES.list; sh.uniforms.uHoleN = HOLES.n; }
+    sh.vertexShader = `varying vec3 vWPos; varying vec3 vWN;${bricks ? ' attribute float surf; varying float vSurf;' : ''}\n` + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      vWN = normalize(mat3(modelMatrix) * objectNormal);${bricks ? '\n      vSurf = surf;' : ''}`);
+    sh.fragmentShader = `uniform sampler2D uDetail; varying vec3 vWPos; varying vec3 vWN;${bricks ? ' varying float vSurf;' : ''}${holes ? HOLE_GLSL : ''}
+      float dHash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      float gHeight = 0.0;\n` + sh.fragmentShader
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+      ${holes ? holeTest('vWPos', holeK.toFixed(3)) : ''}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
       {
-        float d1 = texture2D(uDetail, vWPos.xz * 0.11).r;
-        float d2 = texture2D(uDetail, vWPos.xz * 0.53).r;
+        vec3 an = abs(vWN);
+        vec2 pq = an.y > 0.6 ? vWPos.xz : (an.x > an.z ? vWPos.zy : vWPos.xy);
+        float d1 = texture2D(uDetail, pq * 0.11).r;
+        float d2 = texture2D(uDetail, pq * 0.53).r;
         float d3 = texture2D(uDetail, vec2(vWPos.x + vWPos.z, vWPos.y * 2.5) * 0.05).r;
         float d = mix(d1 * 0.55 + d2 * 0.45, d3, 0.35);
         diffuseColor.rgb *= 1.0 + (d - 0.5) * ${strength.toFixed(2)} * 2.0;
+        gHeight = d1 * 0.09 + d2 * 0.018;
+        ${bricks ? `
+        if (vSurf > 0.5) {
+          float groove = 0.0;
+          if (vSurf < 1.5) {            // stone blocks 1.0 x 0.5 m, every other row shifted
+            vec2 b = pq / vec2(1.0, 0.5); b.x += 0.5 * floor(b.y);
+            vec2 f = fract(b), e = min(f, 1.0 - f) * vec2(1.0, 0.5);
+            groove = 1.0 - smoothstep(0.018, 0.04, min(e.x, e.y));
+            diffuseColor.rgb *= 0.86 + 0.26 * dHash(floor(b));
+          } else if (vSurf < 2.5) {     // planks, 0.28 m wide
+            float y = (an.y > 0.6 ? pq.x : pq.y) / 0.28;
+            float f = fract(y), e = min(f, 1.0 - f) * 0.28;
+            groove = 1.0 - smoothstep(0.006, 0.018, e);
+            float grain = texture2D(uDetail, vec2((an.y > 0.6 ? pq.y : pq.x) * 0.06, y * 0.9)).r;
+            diffuseColor.rgb *= (0.82 + 0.3 * dHash(vec2(floor(y), 3.0))) * (0.9 + grain * 0.2);
+          } else {                      // roof shingles, 0.45 m rows (no bump: it sparkles on slopes)
+            gHeight = 0.0;
+            float y = vWPos.y / 0.45; vec2 b = vec2((vWPos.x + vWPos.z) / 0.8 + 0.5 * floor(y), y);
+            vec2 f = fract(b);
+            groove = max(1.0 - smoothstep(0.0, 0.14, f.y), 1.0 - smoothstep(0.0, 0.06, min(f.x, 1.0 - f.x)));
+            diffuseColor.rgb *= 1.0 + (dHash(floor(b)) - 0.5) * 0.2 * smoothstep(26.0, 8.0, length(vViewPosition));
+          }
+          // fine lines shimmer far away: fade them out with distance
+          groove *= smoothstep(vSurf > 2.5 ? 40.0 : 90.0, vSurf > 2.5 ? 12.0 : 25.0, length(vViewPosition));
+          diffuseColor.rgb *= 1.0 - groove * 0.42;
+          if (vSurf < 2.5) gHeight -= groove * 0.02;
+        }` : ''}
+      }`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      {
+        float fade = ${bump.toFixed(2)} * smoothstep(38.0, 8.0, length(vViewPosition));
+        if (fade > 0.001) {
+          vec3 sp = -vViewPosition, sx = dFdx(sp), sy = dFdy(sp);
+          vec2 dh = vec2(dFdx(gHeight), dFdy(gHeight)) * fade;
+          vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+          float det = dot(sx, r1) * faceDirection;
+          vec3 grad = sign(det) * (dh.x * r1 + dh.y * r2);
+          normal = normalize(abs(det) * normal - grad);
+        }
       }`);
   };
+  mat.customProgramCacheKey = () => `detail-${strength}-${bump}-${bricks}-${holes}-${holeK}`;
   mat.needsUpdate = true;
   return mat;
 }
@@ -134,9 +196,11 @@ export class Grass {
     const uTime = this.uTime;
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uTime;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.uniforms.uHoles = HOLES.list; sh.uniforms.uHoleN = HOLES.n;
+      sh.vertexShader = 'uniform float uTime;\n' + HOLE_GLSL + '\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         {
           vec4 ip = instanceMatrix[3];
+          for (int i = 0; i < ${MAX_HOLES}; i++) { if (i >= uHoleN) break; if (ip.y < uHoles[i].y + 0.5 && distance(ip.xyz, uHoles[i].xyz) < uHoles[i].w * 1.05) transformed *= 0.0; }
           float sw = sin(uTime * 2.2 + ip.x * 0.35 + ip.z * 0.27) * 0.16 + sin(uTime * 4.1 + ip.x * 0.9 + ip.z * 0.4) * 0.05;
           float k = uv.y;
           transformed.x += sw * k; transformed.z += sw * 0.5 * k;
@@ -144,6 +208,7 @@ export class Grass {
           transformed *= smoothstep(150.0, 105.0, dist);
         }`);
     };
+    mat.customProgramCacheKey = () => 'grass-holes';
     this.mat = mat;
   }
   update(focus, dt) {

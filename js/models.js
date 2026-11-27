@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -11,6 +12,31 @@ const metalMat = new THREE.MeshStandardMaterial({ color: 0x343a42, metalness: 0.
 const steelMat = new THREE.MeshStandardMaterial({ color: 0xc4ccd4, metalness: 1, roughness: 0.22 });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0x55ccff, emissive: 0x1d8fff, emissiveIntensity: 0.9, roughness: 0.3 });
 const gloveMat = new THREE.MeshStandardMaterial({ color: 0x2f7bff, roughness: 0.5 });
+// still cubes, just with slightly softened edges so they catch the light like real objects
+const bodyGeo = new RoundedBoxGeometry(1, 1, 1, 3, 0.07);
+function stripeTexture() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#f2c230'; x.fillRect(0, 0, 64, 64);
+  x.fillStyle = '#151515';
+  for (let i = -64; i < 128; i += 32) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 16, 0); x.lineTo(i + 16 + 64, 64); x.lineTo(i + 64, 64); x.fill(); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 1);
+  return t;
+}
+const stripeMat = new THREE.MeshStandardMaterial({ map: stripeTexture(), metalness: 0.35, roughness: 0.45 });
+const yellowMat = new THREE.MeshStandardMaterial({ color: 0xf2c230, metalness: 0.4, roughness: 0.4 });
+const greyMat = new THREE.MeshStandardMaterial({ color: 0x8d939a, metalness: 0.8, roughness: 0.3 });
+const inkMat = new THREE.MeshStandardMaterial({ color: 0x141416, metalness: 0.6, roughness: 0.35 });
+let blobTex = null;
+function blobTexture() {
+  if (blobTex) return blobTex;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const x = cv.getContext('2d'), g = x.createRadialGradient(32, 32, 2, 32, 32, 31);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(0.6, 'rgba(0,0,0,0.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  blobTex = new THREE.CanvasTexture(cv);
+  return blobTex;
+}
 
 // shared gun / hook geometries (created once)
 const GG = {
@@ -21,6 +47,10 @@ const GG = {
   tank: new THREE.CylinderGeometry(0.03, 0.03, 0.22, 10),
   cone: new THREE.ConeGeometry(0.045, 0.13, 10),
   collar: new THREE.CylinderGeometry(0.04, 0.04, 0.05, 10),
+  gBody: new THREE.CylinderGeometry(0.075, 0.09, 0.15, 16),
+  sleeve: new THREE.CylinderGeometry(0.092, 0.092, 0.2, 16, 1, true),
+  lCone: new THREE.ConeGeometry(0.028, 0.1, 8),
+  lSpool: new THREE.CylinderGeometry(0.07, 0.07, 0.05, 16),
 };
 const ropeGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true).translate(0, 0.5, 0);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -63,8 +93,31 @@ export function makeTextSprite(text, o = {}) {
   return s;
 }
 
-export function makeHookHead() {
+// three hook designs: the normal steel hook, the GROUND GRABBER (big striped yellow-black claw)
+// and the LIGHTROPE (small grey hook with black prongs)
+export function makeHookHead(variant = 'normal') {
   const h = new THREE.Group();
+  if (variant === 'grabber') {
+    const body = new THREE.Mesh(GG.gBody, stripeMat);
+    body.rotation.x = Math.PI / 2; body.position.z = 0.03; h.add(body);
+    const nose = new THREE.Mesh(GG.collar, inkMat); nose.scale.set(1.4, 1, 1.4); nose.rotation.x = Math.PI / 2; nose.position.z = -0.06; h.add(nose);
+    for (let i = 0; i < 4; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = (i / 4) * TAU + Math.PI / 4; h.add(arm);
+      const p = new THREE.Mesh(boxGeo, i % 2 ? yellowMat : inkMat);
+      p.scale.set(0.04, 0.04, 0.2); p.position.set(0, 0.085, -0.05); p.rotation.x = -0.55; arm.add(p);
+      const tip = new THREE.Mesh(boxGeo, i % 2 ? inkMat : yellowMat);
+      tip.scale.set(0.04, 0.09, 0.04); tip.position.set(0, 0.105, -0.155); tip.rotation.x = 0.6; arm.add(tip);
+    }
+    return h;
+  }
+  if (variant === 'lightrope') {
+    const core = new THREE.Mesh(GG.lCone, greyMat); core.rotation.x = -Math.PI / 2; core.position.z = -0.04; h.add(core);
+    for (let i = 0; i < 3; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = (i / 3) * TAU; h.add(arm);
+      const p = new THREE.Mesh(boxGeo, inkMat); p.scale.set(0.012, 0.012, 0.09); p.position.set(0, 0.03, 0.02); p.rotation.x = -0.8; arm.add(p);
+    }
+    return h;
+  }
   const core = new THREE.Mesh(GG.cone, steelMat);
   core.rotation.x = -Math.PI / 2;
   core.position.z = -0.05;
@@ -114,9 +167,13 @@ export function makeGun(withHand) {
   tank.rotation.x = Math.PI / 2;
   tank.position.set(0.078, 0.03, 0.02);
   g.add(tank);
-  const head = makeHookHead();
-  head.position.z = -0.38;
-  g.add(head);
+  const heads = { normal: makeHookHead(), grabber: makeHookHead('grabber'), lightrope: makeHookHead('lightrope') };
+  for (const k in heads) { heads[k].position.z = -0.38; heads[k].visible = k === 'normal'; g.add(heads[k]); }
+  heads.grabber.scale.setScalar(1.5);
+  const head = heads.normal;
+  // skins: striped sleeve for the Ground Grabber, a big grey spool for the Lightrope
+  const sleeve = new THREE.Mesh(GG.sleeve, stripeMat); sleeve.rotation.x = Math.PI / 2; sleeve.visible = false; g.add(sleeve);
+  const spool2 = new THREE.Mesh(GG.lSpool, greyMat); spool2.rotation.z = Math.PI / 2; spool2.position.set(0, 0.1, 0.04); spool2.visible = false; g.add(spool2);
   const muzzle = new THREE.Object3D();
   muzzle.position.z = -0.38;
   g.add(muzzle);
@@ -127,7 +184,17 @@ export function makeGun(withHand) {
     hand.rotation.x = 0.25;
     g.add(hand);
   }
-  return { group: g, head, muzzle };
+  const gun = {
+    group: g, head, heads, muzzle, variant: 'normal',
+    setVariant(v) {
+      if (!heads[v]) v = 'normal';
+      const shown = this.head.visible;
+      for (const k in heads) heads[k].visible = false;
+      this.head = heads[v]; this.head.visible = shown; this.variant = v;
+      sleeve.visible = v === 'grabber'; spool2.visible = v === 'lightrope';
+    },
+  };
+  return gun;
 }
 
 // A cube with eyes. Feet at y = 0, faces -Z.
@@ -137,7 +204,7 @@ export function makeCharacter(color, o = {}) {
   g.add(bodyG);
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05, emissive: 0x000000 });
   if (o.ghost) { mat.transparent = true; mat.opacity = 0.55; mat.emissive.set(0x1a2266); }
-  const body = new THREE.Mesh(boxGeo, mat);
+  const body = new THREE.Mesh(bodyGeo, mat);
   body.scale.setScalar(1.4);
   body.position.y = 0.7;
   body.castShadow = true;
@@ -178,6 +245,10 @@ export function makeCharacter(color, o = {}) {
       bodyG.add(sp);
     }
   }
+  // soft contact shadow on the ground under the cube (works even with shadows off)
+  const blob = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, opacity: 1 }));
+  blob.rotation.x = -Math.PI / 2; blob.scale.setScalar(2.1); blob.position.y = 0.04; blob.renderOrder = 1;
+  if (!o.noBlob) g.add(blob);
   const gun = makeGun(false);
   gun.group.scale.setScalar(1.7);
   gun.group.position.set(0.85, 0.55, -0.25);
@@ -220,7 +291,17 @@ export function makeCharacter(color, o = {}) {
   }
 
   return {
-    group: g, mat, bodyG, gunHead: gun.head, gunMuzzle: gun.muzzle, hp, tag,
+    group: g, mat, bodyG, gun, gunHead: gun.head, gunMuzzle: gun.muzzle, hp, tag, blob,
+    setHook(v) { if (gun.variant !== v) { gun.setVariant(v); this.gunHead = gun.head; } },
+    // where the ground is below the feet (null = over the void): moves + fades the contact shadow
+    setGround(dy) {
+      if (dy === null || dy === undefined || dy > 30) { blob.visible = false; return; }
+      blob.visible = true;
+      const sc = g.scale.x || 1;
+      blob.position.y = 0.04 - dy / sc;
+      blob.material.opacity = Math.max(0, 1 - dy / 14);
+      blob.scale.setScalar(2.1 * (1 + dy * 0.04));
+    },
     blinkT: 2 + Math.random() * 3, flash: 0, t: Math.random() * 10,
     setHp(f) {
       if (!hp) return;
@@ -255,13 +336,47 @@ export function makeCharacter(color, o = {}) {
       if (hp && cam) hp.group.quaternion.copy(g.quaternion).invert().multiply(cam.quaternion);
     },
     dispose() {
-      mat.dispose();
+      mat.dispose(); blob.material.dispose();
       if (hp) { hp.fill.material.dispose(); hp.bg.material.dispose(); }
       if (tag) { tag.material.map.dispose(); tag.material.dispose(); }
       if (glow) { glow.material.dispose(); glow.userData.core.material.dispose(); }
     },
   };
 }
+
+// Rope drawn as a curve: hangs down when it has slack (the Lightrope is a real, loose rope).
+const _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rc = new THREE.Vector3(), _rq = new THREE.Quaternion(), _rm = new THREE.Matrix4(), _rs = new THREE.Vector3();
+export class SagRope {
+  constructor(color = 0x2a2a2a, thick = 0.03, n = 18) {
+    this.n = n; this.thick = thick;
+    this.mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+    this.mesh = new THREE.InstancedMesh(ropeGeo, this.mat, n);
+    this.mesh.frustumCulled = false; this.mesh.visible = false;
+  }
+  setStyle(color, thick) { this.mat.color.set(color); this.thick = thick; }
+  set(a, b, sag = 0) {
+    const len = a.distanceTo(b);
+    if (len < 1e-3) { this.mesh.visible = false; return; }
+    this.mesh.visible = true;
+    _rc.addVectors(a, b).multiplyScalar(0.5); _rc.y -= 2 * Math.min(sag, len * 0.45);
+    _ra.copy(a);
+    for (let i = 1; i <= this.n; i++) {
+      const t = i / this.n, u = 1 - t;
+      _rb.set(u * u * a.x + 2 * u * t * _rc.x + t * t * b.x, u * u * a.y + 2 * u * t * _rc.y + t * t * b.y, u * u * a.z + 2 * u * t * _rc.z + t * t * b.z);
+      _d.subVectors(_rb, _ra);
+      const l = _d.length() || 1e-4;
+      _rq.setFromUnitVectors(UP, _d.divideScalar(l));
+      _rm.compose(_ra, _rq, _rs.set(this.thick, l, this.thick));
+      this.mesh.setMatrixAt(i - 1, _rm);
+      _ra.copy(_rb);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+  hide() { this.mesh.visible = false; }
+  dispose() { this.mat.dispose(); }
+}
+// sag of a rope of length L hung between two points d apart (parabola approximation of the catenary)
+export const ropeSag = (L, d) => (L > d ? Math.sqrt((3 * d * (L - d)) / 8) : 0);
 
 export class Rope {
   constructor(color = 0x2a2a2a, thick = 0.03) {

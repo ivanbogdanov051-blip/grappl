@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { integrate, launchTo, wallClimb } from './entity.js';
+import { integrate, launchTo, wallClimb, applyTether } from './entity.js';
 import { KILL_Y, SPAWN, G, inSafeZone } from './world.js';
 import { ABILITY } from './upgrades.js';
 
@@ -25,6 +25,7 @@ export class Player {
     this.cd = {}; this.parryT = 0; this.parried = new Set(); this.shieldT = 0; this.glideT = 0; this.superShot = 0; this.hist = []; this.histT = 0;
     this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
     this.runT = 0; this.dj = false; this.angelCd = 0; this.lastGround = null; this.lgT = 0;
+    this.stunT = 0; this.held = null; this.yankCd = 0; this.tether = { a: new V(), L: 0, t: 0 };
   }
   has(k) { return !!(this.game.save.passive || {})[k]; }
   get stats() { return this.game.stats; }
@@ -49,6 +50,7 @@ export class Player {
     this.hist.length = 0; this.superShot = 0; this.parryT = 0; this.shieldT = 0; this.glideT = 0;
     this.slowT = 0; this.cloakT = 0; this.jetT = 0; this.vampT = 0; this.rageT = 0; this.snipeT = 0; this.laserT = 0;
     this.runT = 0; this.dj = false; this.lastGround = null; this.lsUsed = false; this.blizT = 0; this.slamming = false;
+    this.stunT = 0; this.tether.t = 0; this.game.grab.clearHeld(this);
     this.game.ui.hideDeath();
   }
   die(msg) {
@@ -56,7 +58,7 @@ export class Player {
     this.dead = true;
     this.deadT = 5; this.laserT = 0;
     this.hp = 0;
-    this.hook.state = HOOK.IDLE;
+    this.hook.state = HOOK.IDLE; this.game.grab.clearHeld(this); this.tether.t = 0;
     this.game.onLocalDeath(this, msg);
   }
 
@@ -64,15 +66,23 @@ export class Player {
   shoot() {
     if (this.dead) return;
     const g = this.game, s = this.stats, h = this.hook;
+    if (this.stunT > 0) { g.ui.toast('💫 You are stunned!'); return; }
+    const kind = g.hookKind();
+    if (kind === 'grabber') {
+      // GROUND GRABBER: first click rips a piece out, second click throws it
+      if (this.held) { g.grab.throwHeld(this); g.recoil = 1.4; return; }
+      if (h.state !== HOOK.IDLE) return;
+    }
     if (h.state === HOOK.IDLE) {
       const o = _a.copy(g.camera.position);
       const f = this.forward(_f);
       // the hook travels exactly along the crosshair ray (rope is drawn from the gun muzzle)
       h.pos.copy(o).addScaledVector(f, 0.4);
       h.dir.copy(f);
-      h.dist = 0.4; h.target = null; h.swap = false; h.bomb = false;
-      h.super = this.superShot > 0 && !this.onGround;
-      h.snipe = this.snipeT > 0;
+      h.dist = 0.4; h.target = null; h.swap = false; h.bomb = false; h.carry = null;
+      h.kind = kind === 'grabber' ? 'grab' : kind === 'lightrope' ? 'light' : 'normal';
+      h.super = h.kind === 'normal' && this.superShot > 0 && !this.onGround;
+      h.snipe = h.kind === 'normal' && this.snipeT > 0;
       if (h.snipe) { this.snipeT = 0; h.super = false; g.sfx.parry(); }
       if (h.super) { this.superShot = 0; g.ui.toast('⚡ SUPER SHOT'); }
       h.state = HOOK.FLYING;
@@ -86,6 +96,7 @@ export class Player {
       h.state = HOOK.IDLE;
       g.sfx.zip();
     } else if (h.state === HOOK.LATCHED) {
+      if (h.kind === 'light' && this.yankCd > 0) return;
       const tg = g.getEntity(h.target);
       if (tg && !tg.dead) {
         _a.subVectors(this.pos, tg.pos); _a.y = 0;
@@ -95,12 +106,15 @@ export class Player {
         pt.y += 1.5;
         g.deliverHit(tg.id, { mode: 'yank', dmg: Math.round(s.damage * 0.5), a: pt.toArray(), attacker: this.id, aname: g.name });
         g.sfx.zip();
+        // LIGHTROPE: the rope stays on, now as a short leash
+        if (h.kind === 'light') { h.L = 4.5; this.yankCd = 0.8; g.ui.toast('🪢 Leashed! Click to yank again · Q lets go'); return; }
       }
       h.state = HOOK.IDLE;
     }
   }
   cancel() {
     const h = this.hook;
+    if (this.held) { this.game.grab.dropHeld(this); return; }
     if (this.snipeT > 0 && h.state === HOOK.IDLE) { this.snipeT = 0; this.game.ui.toast('🎯 Snipe cancelled'); return; }
     if (h.state === HOOK.FLYING || h.state === HOOK.ATTACHED || h.state === HOOK.LATCHED) {
       h.state = HOOK.RETRACT;
@@ -112,6 +126,12 @@ export class Player {
     const g = this.game, A = ABILITY[key];
     if (this.dead || !A) return false;
     if ((this.cd[key] || 0) > 0) return false;
+    if (this.stunT > 0) { g.ui.toast('💫 You are stunned!'); return false; }
+    const hk = g.hookKind();
+    if ((hk !== 'normal' && key === 'snipe') || (hk === 'grabber' && (key === 'swap' || key === 'bomb'))) {
+      g.ui.toast(`${A.icon} ${A.name} only works with the Standard Hook (Tab to switch hooks)`);
+      return false;
+    }
     const f = this.forward(_f);
     switch (key) {
       case 'swap': {
@@ -119,7 +139,7 @@ export class Player {
         const h = this.hook;
         h.pos.copy(g.camera.position).addScaledVector(f, 0.4);
         h.dir.copy(f); h.dist = 0.4; h.target = null;
-        h.state = HOOK.FLYING; h.swap = true; h.bomb = false; h.super = false;
+        h.state = HOOK.FLYING; h.swap = true; h.bomb = false; h.super = false; h.kind = 'normal'; h.snipe = false;
         g.sfx.shoot(); g.recoil = 1;
         break;
       }
@@ -143,7 +163,7 @@ export class Player {
         const h = this.hook;
         h.pos.copy(g.camera.position).addScaledVector(f, 0.4);
         h.dir.copy(f); h.dist = 0.4; h.target = null;
-        h.state = HOOK.FLYING; h.bomb = true; h.swap = false; h.super = false;
+        h.state = HOOK.FLYING; h.bomb = true; h.swap = false; h.super = false; h.kind = 'normal'; h.snipe = false;
         g.sfx.shoot(); g.recoil = 1;
         break;
       }
@@ -433,7 +453,13 @@ export class Player {
       }
       return;
     }
-    if (this.shieldT > 0) { g.ui.toast('🛡️ Blocked!'); _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fd3ff, 10, 5, 0.15); return; }
+    if (this.shieldT > 0) { if (hit.mode !== 'tether') { g.ui.toast('🛡️ Blocked!'); _a.copy(this.pos); _a.y += 0.8; g.particles.burst(_a, 0x6fd3ff, 10, 5, 0.15); } return; }
+    if (hit.mode === 'tether') {
+      if (!Array.isArray(hit.a) || !(hit.L > 0)) return;
+      if (this.tether.t <= 0) g.ui.toast(`🪢 ${hit.aname} tied you up with a Lightrope!`);
+      this.tether.a.fromArray(hit.a); this.tether.L = Math.max(2, +hit.L); this.tether.t = 0.45;
+      return;
+    }
     this.lastAttacker = { id: hit.attacker, name: hit.aname, t: performance.now() };
     const dmg = (hit.dmg || 0) * (this.has('ironskin') ? 0.75 : 1);
     this.hp -= dmg;
@@ -443,6 +469,7 @@ export class Player {
     this.lastHurt = g.time;
     g.hurtFlash(); g.shake(0.5); g.sfx.hurt();
     if (hit.freeze) { this.slowT = Math.max(this.slowT, hit.freeze); g.ui.toast(`❄️ Frozen by ${hit.aname}! You're slowed`); }
+    if (hit.stun) { this.stunT = Math.max(this.stunT, Math.min(3, hit.stun)); g.ui.toast(`💫 STUNNED by ${hit.aname}!`); }
     if (hit.mode === 'pull' || hit.mode === 'yank') {
       _a.fromArray(hit.a);
       launchTo(this, this.pos, _a, hit.spd || (hit.mode === 'yank' ? 44 : 38), hit.mode === 'yank' ? 1 : 3, hit.mode === 'pull' || !!hit.parry);
@@ -478,7 +505,10 @@ export class Player {
       return;
     }
     const s = this.stats;
-    const mx = input.mx, my = input.my;
+    const stunned = this.stunT > 0;
+    if (stunned) { this.stunT -= dt; if (Math.random() < dt * 10) { _a.copy(this.pos); _a.y += 1.6; g.particles.burst(_a, 0xffe14a, 1, 2, 0.15); } }
+    if (this.yankCd > 0) this.yankCd -= dt;
+    const mx = stunned ? 0 : input.mx, my = stunned ? 0 : input.my;
     let wx = -Math.sin(this.yaw) * my + Math.cos(this.yaw) * mx;
     let wz = -Math.cos(this.yaw) * my - Math.sin(this.yaw) * mx;
     const wl = Math.hypot(wx, wz);
@@ -487,7 +517,7 @@ export class Player {
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (this.runT > 0 && wl < 0.1 && hs > 1) { wx = this.vel.x / hs; wz = this.vel.z / hs; } // RUNNER keeps you going
     const adr = this.has('adrenaline') && this.hp < s.health * 0.3 ? 1.4 : 1;
-    const maxSp = this.runT > 0 ? Math.max(34, s.speed * 2.2) : (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1) * adr;
+    const maxSp = (this.runT > 0 ? Math.max(34, s.speed * 2.2) : (running ? s.speed : 7) * (this.slowT > 0 ? 0.45 : 1) * adr) * (this.held ? 0.8 : 1);
     if (this.onGround) {
       if (hs > maxSp + 1) {
         const k = Math.max(0, 1 - 3.5 * dt);
@@ -498,7 +528,7 @@ export class Player {
         this.vel.x += (wx * maxSp - this.vel.x) * k;
         this.vel.z += (wz * maxSp - this.vel.z) * k;
       }
-      if (input.consumeJump()) { this.vel.y = 9.5; this.onGround = false; g.sfx.jump(); }
+      if (!stunned && input.consumeJump()) { this.vel.y = 9.5; this.onGround = false; g.sfx.jump(); }
     } else {
       const air = (this.glideT > 0 ? 34 : this.has('aircontrol') ? 40 : 16) * dt;
       const nvx = this.vel.x + wx * air, nvz = this.vel.z + wz * air;
@@ -536,6 +566,7 @@ export class Player {
     if (this.slamming) { _b.copy(this.pos); _b.y += 1; if (Math.random() < dt * 40) g.particles.burst(_b, 0xdfe6ee, 2, 2, 0.15); }
     const wasAir = !this.onGround, preSpeed = Math.hypot(this.vel.x, this.vel.z);
     integrate(this, dt, g.world);
+    if (this.tether.t > 0) { this.tether.t -= dt; applyTether(this, this.tether.a, this.tether.L, 0.8); }
     wallClimb(this, s.climbReach, s.climbSpeed);
     if (this.onGround) this.dj = false;
     if (this.slamming && (this.onGround || this.inWater) && !(this.slamDelay > 0)) {
@@ -585,14 +616,32 @@ export class Player {
 
   updateHook(dt) {
     const h = this.hook, g = this.game, s = this.stats;
+    const kind = h.kind || 'normal';
     if (h.state === HOOK.FLYING) {
       const mul = h.snipe ? 3 : h.super ? 2 : 1;
-      const step = s.hookSpeed * mul * dt;
+      const spd = kind === 'grab' ? 0.8 : kind === 'light' ? 1.2 : 1;
+      const range = kind === 'grab' ? 75 : kind === 'light' ? s.range * 1.1 : s.range * mul;
+      const step = s.hookSpeed * mul * spd * dt;
       const wh = g.world.raycast(h.pos, h.dir, step);
       const wd = wh ? wh.dist : Infinity;
       if (wh) _c.copy(wh.point);
       const eh = this.safe ? null : g.hitTestEntities(h.pos, h.dir, step, this.id, false);
-      if (h.bomb && ((eh && eh.dist < wd) || wh)) {
+      if (kind === 'grab' && eh && eh.dist < wd) {
+        // the claw itself whacks people: stun
+        const tg = eh.ent;
+        h.pos.copy(tg.pos); h.pos.y += 0.7 * (tg.scale || 1);
+        const l = Math.hypot(h.dir.x, h.dir.z) || 1;
+        g.deliverHit(tg.id, { mode: 'bump', dmg: 15, k: 0.6, d: [h.dir.x / l, 0, h.dir.z / l], stun: 1.5, attacker: this.id, aname: g.name });
+        g.sfx.hit(); g.ui.hitMarker(); g.ui.toast('💫 Stunned!');
+        g.particles.burst(h.pos, 0xffe14a, 14, 6, 0.2);
+        h.state = HOOK.RETRACT;
+      } else if (kind === 'grab' && wh) {
+        h.pos.copy(_c);
+        const piece = g.grab.rip(wh, h.dir, this);
+        h.state = HOOK.RETRACT;
+        if (piece) { h.carry = piece; g.sfx.thunk(); g.shake(0.25); }
+        else { g.sfx.cancel(); g.ui.toast(this.safe || inSafeZone(h.pos) ? '🟨 Nothing can be ripped out of the safe zone' : '🟨 That won\'t come loose'); }
+      } else if (h.bomb && ((eh && eh.dist < wd) || wh)) {
         const at = eh && eh.dist < wd ? eh.ent.pos.clone().setY(eh.ent.pos.y + 0.7) : _c.clone();
         h.pos.copy(at); h.state = HOOK.RETRACT; h.bomb = false;
         g.explode(at, this);
@@ -610,7 +659,8 @@ export class Player {
         h.state = HOOK.LATCHED;
         h.target = eh.ent.id;
         h.pos.copy(eh.ent.pos); h.pos.y += 0.7;
-        g.deliverHit(eh.ent.id, { mode: 'latch', dmg: Math.round(s.damage * (h.snipe ? 2.5 : 1)), attacker: this.id, aname: g.name });
+        g.deliverHit(eh.ent.id, { mode: 'latch', dmg: Math.round(s.damage * (h.snipe ? 2.5 : kind === 'light' ? 0.6 : 1)), attacker: this.id, aname: g.name });
+        if (kind === 'light') { h.L = Math.max(3, eh.ent.pos.distanceTo(this.pos) + 0.5); g.ui.toast(`🪢 ${eh.ent.name} is tied to you! Click to yank`); }
         if (h.snipe) {
           // explosive snipe
           g.blast(h.pos, g.ownerOf(this), 7, 45, true, true, 1.6);
@@ -635,26 +685,35 @@ export class Player {
       } else if (wh) {
         h.pos.copy(_c); h.anchor.copy(_c);
         h.state = HOOK.ATTACHED;
+        if (kind === 'light') { _a.copy(this.pos); _a.y += 0.8; h.L = Math.max(2.5, _a.distanceTo(_c)); }
         g.sfx.thunk();
         g.particles.burst(h.pos, 0x8b7b6a, 6, 4, 0.15);
       } else {
         h.pos.addScaledVector(h.dir, step);
         h.dist += step;
         if (h.snipe) g.particles.burst(h.pos, 0xff5050, 1, 0.5, 0.25);
-        if (h.dist >= s.range * mul) { h.state = HOOK.RETRACT; h.snipe = false; }
+        if (h.dist >= range) { h.state = HOOK.RETRACT; h.snipe = false; }
       }
     } else if (h.state === HOOK.LATCHED) {
       const tg = g.getEntity(h.target);
       if (!tg || tg.dead) h.state = HOOK.RETRACT;
       else {
         h.pos.copy(tg.pos); h.pos.y += 0.7;
-        if (h.pos.distanceTo(this.pos) > s.range * 1.6) h.state = HOOK.RETRACT;
+        const d = h.pos.distanceTo(this.pos);
+        if (kind === 'light') {
+          if (d > Math.max(s.range * 2.5, h.L + 40)) { h.state = HOOK.RETRACT; g.ui.toast('🪢 The rope snapped!'); }
+          else g.tetherEntity(this, tg, h.L);
+        } else if (d > s.range * 1.6) h.state = HOOK.RETRACT;
       }
+    } else if (h.state === HOOK.ATTACHED && kind === 'light') {
+      // hanging on a loose rope: swing
+      if (applyTether(this, h.anchor, h.L, 0.8) && !this.onGround) this.climbT = Math.max(this.climbT, 0.2);
     } else if (h.state === HOOK.RETRACT) {
       g.muzzleWorld(_a);
       _b.subVectors(_a, h.pos);
-      const d = _b.length(), st = 240 * dt;
-      if (d <= st) h.state = HOOK.IDLE;
+      const d = _b.length(), st = (h.carry ? 120 : 240) * dt;
+      if (h.carry) g.grab.carryTo(h.carry, h.pos);
+      if (d <= st) { h.state = HOOK.IDLE; if (h.carry) { g.grab.hold(this, h.carry); h.carry = null; } }
       else h.pos.addScaledVector(_b, st / d);
     }
   }

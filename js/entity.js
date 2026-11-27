@@ -73,3 +73,17 @@ export function wallClimb(e, reach, speed) {
     e.vel.z -= e.wallN.z * 4;
   }
 }
+
+// A rope that can go slack but never longer than L: keeps `e` (its point at height `up` above the feet)
+// within L of anchor `a`. Outward speed is removed, sideways speed is kept, so you swing like a pendulum.
+export function applyTether(e, a, L, up = 0) {
+  const dx = e.pos.x - a.x, dy = e.pos.y + up - a.y, dz = e.pos.z - a.z;
+  const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (d <= L || d < 1e-4) return false;
+  const nx = dx / d, ny = dy / d, nz = dz / d, over = Math.min(d - L, 3);
+  e.pos.x -= nx * over; e.pos.y -= ny * over; e.pos.z -= nz * over;
+  const vn = e.vel.x * nx + e.vel.y * ny + e.vel.z * nz;
+  if (vn > 0) { e.vel.x -= vn * nx; e.vel.y -= vn * ny; e.vel.z -= vn * nz; }
+  e.braking = false;
+  return true;
+}

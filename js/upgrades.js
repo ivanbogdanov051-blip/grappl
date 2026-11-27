@@ -98,3 +98,12 @@ export const PASSIVES = [
   { key: 'adrenaline', icon: '💢', name: 'Adrenaline', cost: 3000, desc: 'Below 30% health you move 40% faster and deal 50% more damage.' },
 ];
 export const PASSIVE = Object.fromEntries(PASSIVES.map((p) => [p.key, p]));
+
+// Grappling hooks: bought with GEMS (+ coins) in the rare black-and-yellow HOOK SHOPS.
+// Gems drop from bosses (10 each) and from players you take out (2).
+export const HOOKS = [
+  { key: 'normal', icon: '🪝', name: 'Standard Hook', gems: 0, cost: 0, design: 'Steel hook with a blue glow', desc: 'Your trusty hook: grapple onto anything, pull yourself there, yank enemies.' },
+  { key: 'grabber', icon: '🟨', name: 'GROUND GRABBER', gems: 10, cost: 2500, design: 'A big striped yellow-and-black claw', desc: 'Rips a chunk out of whatever it hits: dig holes in the ground, tear pieces out of walls, uproot trees and boulders. Click again to THROW it: it STUNS and hurts whoever it hits, smashes through walls and lands as a solid block, so you can wall in your friends or build cover to hide behind. Q drops it in front of you. It can\'t grapple you anywhere.', no: 'Snipe, Swap Shot, Hook Bomb, Super Leap shots, Explosive Hook, Burning Hook, Long Arm, Turbo Pull' },
+  { key: 'lightrope', icon: '🪢', name: 'LIGHTROPE HOOK', gems: 5, cost: 3500, design: 'A small grey hook with black prongs on a thin loose rope', desc: 'Its rope is loose and dynamic and holds on to anything until you PULL. Hook a wall and swing around on it like a pendulum. Hook an enemy or a friend and they are tied to you: they can\'t get further away than the rope. Click to pull: you zoom to the wall, or you yank them in and keep them on a short leash. Q lets go.', no: 'Snipe' },
+];
+export const HOOK_DEF = Object.fromEntries(HOOKS.map((h) => [h.key, h]));

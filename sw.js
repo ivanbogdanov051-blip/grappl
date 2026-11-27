@@ -1,15 +1,16 @@
 // Service worker: makes Sky Grapple installable and playable offline (solo).
 // Game files are fetched network-first so updates show up right away; the cache is the offline fallback.
-const CACHE = 'skygrapple-v9';
+const CACHE = 'skygrapple-v10';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg',
   'js/main.js', 'js/world.js', 'js/player.js', 'js/enemy.js', 'js/enemytypes.js', 'js/remote.js', 'js/net.js', 'js/input.js',
-  'js/ui.js', 'js/audio.js', 'js/clouds.js', 'js/particles.js', 'js/models.js', 'js/entity.js', 'js/noise.js', 'js/upgrades.js', 'js/realism.js', 'js/music.js',
+  'js/ui.js', 'js/audio.js', 'js/clouds.js', 'js/particles.js', 'js/models.js', 'js/entity.js', 'js/noise.js', 'js/upgrades.js', 'js/realism.js', 'js/music.js', 'js/grab.js',
 ];
 const CDN = [
   'https://unpkg.com/three@0.160.0/build/three.module.js',
   'https://unpkg.com/three@0.160.0/examples/jsm/objects/Sky.js',
   'https://unpkg.com/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js',
+  'https://unpkg.com/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js',
   'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js',
 ];
 
