@@ -230,3 +230,18 @@ body.touch #rareAbilities { left: max(14px, env(safe-area-inset-left)); top: 162
 body.touch #rareAbilities { gap: 3px; max-width: 150px; justify-content: flex-start; }
 #rareAbilities { left: max(10px, env(safe-area-inset-left)); top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; flex-wrap: wrap; max-height: 60vh; max-width: none; align-content: flex-start; }
 body.touch #rareAbilities { top: 162px; transform: none; max-height: calc(100vh - 340px); max-width: none; }
+
+#hookName.hk-wind { background: rgba(30,140,120,0.8); color: #eafff9; }
+#hookName.hk-thunder { background: rgba(150,110,0,0.85); color: #fff6c0; }
+.upg.hookrow.hk-wind .un { color: #9ff5e0; }
+.upg.hookrow.hk-thunder .un { color: #ffe14a; }
+.upg.passive.hookpass { background: rgba(255,210,58,0.1); border: 1px solid rgba(255,210,58,0.3); }
+/* smaller ability buttons */
+.ab { width: 44px; height: 44px; border-radius: 11px; }
+.ab .ai { font-size: 20px; line-height: 40px; }
+.ab .ak { font-size: 9px; left: 3px; top: 1px; }
+.ab .acd { font-size: 14px; }
+#abilities { gap: 5px; bottom: 30px; }
+body.touch .ab { width: 40px; height: 40px; border-radius: 10px; }
+body.touch .ab .ai { font-size: 18px; line-height: 36px; }
+body.touch #abilities { width: 220px; gap: 4px; }

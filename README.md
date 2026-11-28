@@ -140,6 +140,13 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | 🩸 Bloodlust | 2000 | Every kill heals 30 HP |
 | 🏆 Bounty Hunter | 2500 | +25 coins per kill (+150 for bosses) |
 | 💢 Adrenaline | 3000 | Below 30% health: 40% faster and 50% more damage |
+| 🪝 **Hook Master** | 2500 | Standard Hook: 30% more reach, hooking someone deals 50% more damage |
+| 🩸 **Leech Rope** | 3000 | Lightrope: whoever is tied to you loses 6 HP a second and you heal that much |
+| 🪚 **Razor Boomerang** | 3000 | Boomerang: 50% more damage and it hits everyone again on the way back |
+| 🧊 **Permafrost** | 3000 | Frost Hook: 5 s freeze, 8 ice platforms that last 60 s |
+| 💥 **Warp Blast** | 3500 | Warp Hook: an explosion where you left (20 dmg in 5 m) and half the recharge |
+| 🌪️ **Tailwind** | 3000 | Wind Hook: 3 dash charges, and each dash blasts enemies within 7 m away (12 dmg) |
+| ⛈️ **Storm Caller** | 3500 | Thunder Hook: lightning jumps to 6 enemies and stuns for 1.5 s |
 | 🏗️ **Structure Lifter** | 5000 | GROUND GRABBER upgrade: grabbing a building rips out the WHOLE structure (house, tower, windmill, castle…) in one go. Throw it: 60 damage and a 3 s stun to everyone it hits, and it lands as a solid building. Grab a thrown building again to pick the whole thing back up |
 
 ## Gems and grappling hooks
@@ -153,7 +160,11 @@ About 1 in 3 shops is a purple **PASSIVE SHOP** (purple roof, "PASSIVES" sign, p
 | 🪢 **LIGHTROPE HOOK** | 💎 5 + 🪙 3500 | small grey hook, black prongs, thin loose rope | The rope is loose and holds on to anything until you **pull**. Hook a wall and swing like a pendulum. Hook an enemy or a player and they are tied to you: they can't get further away than the rope (a boss is too heavy and drags you instead). Click to pull: you zoom to the wall, or you yank them in and keep them on a short 4.5 m leash. Q lets go. Snipe doesn't work with it. |
 | 🪃 **BOOMERANG HOOK** | 💎 4 + 🪙 2000 | spinning orange-and-white curved blade | Thrown, not fired: it curves out and comes back to you, slicing through every enemy and player in its way (each one hit once, 1.1× hook damage). It scoops up coins and coin or gem bags and brings them back to you. Click to call it back early. It can't grapple you anywhere; Snipe, Swap Shot, Hook Bomb, Super Leap shots and Explosive Hook don't work with it. |
 | ❄️ **FROST HOOK** | 💎 6 + 🪙 3000 | icy blue crystal hook, frosted rope | Grapples like the Standard Hook, but whoever it hits is **frozen** for 2.5 s. Click again while it's still flying and it freezes right there into a 4 × 4 m **ice platform** you can stand on, and you stay hooked to it so you can pull yourself over. You can have 4 platforms at once and each one melts after 30 s. Snipe doesn't work with it. |
-| 🌀 **WARP HOOK** | 💎 8 + 🪙 4500 | purple ring with a glowing cyan portal | No pulling: wherever it lands you **teleport** there instantly and keep your speed. If it hits an enemy or a player, you **swap places** (they're stunned for 1 s; bosses are too heavy, so you land behind them). 1 s recharge. Snipe, Swap Shot and Super Leap shots don't work with it. |
+| 🌀 **WARP HOOK** | 💎 8 + 🪙 4500 | purple ring with a glowing cyan portal | No pulling: wherever it lands you **teleport** there instantly and keep your speed. In mid-air a tap warps you instantly to where you aim (20 m ahead if nothing is there). If it hits an enemy or a player, you **swap places** (they're stunned for 1 s; bosses are too heavy, so you land behind them). 1 s recharge. Snipe, Swap Shot and Super Leap shots don't work with it. |
+| 🌬️ **WIND HOOK** | 💎 6 + 🪙 3500 | white-and-teal fan hook | **Low gravity** while you hold it (you jump about twice as high and fall slowly). Tap in mid-air for a **wind dash** where you look (2 charges, refilled on landing or every 1.6 s). Every enemy hit is a **swap attack**: you boost to them and they're flung to where you were. Still grapples walls. |
+| ⚡ **THUNDER HOOK** | 💎 7 + 🪙 4000 | yellow zig-zag bolt, electric-blue prongs | Grapples like the Standard Hook but faster. Whoever it hits is shocked and the lightning **jumps to 3 more enemies** nearby (20 dmg each, short stun). |
+
+Every hook has its own passive in the Passive Shop (it only works while that hook is equipped).
 
 Everything the Ground Grabber changes (holes, ripped walls, thrown blocks) is shared with everyone in the room, including players who join later.
 

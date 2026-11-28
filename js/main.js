@@ -16,7 +16,7 @@ import { Sfx } from './audio.js';
 import { Clouds } from './clouds.js';
 import { Particles } from './particles.js';
 import { makeGun, makeHookHead, Rope, SagRope, ropeSag, makeCharacter, makeTextSprite } from './models.js';
-import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE, HOOKS, HOOK_DEF } from './upgrades.js';
+import { computeStats, COSTS, MAX_LEVEL, ABILITY, ABILITIES, PASSIVE, PASSIVES, HOOKS, HOOK_DEF } from './upgrades.js';
 import { Grab } from './grab.js';
 import { applyTether } from './entity.js';
 import { ENEMY_TYPES, ENEMY_KEYS, BOSS_KEYS } from './enemytypes.js';
@@ -29,8 +29,8 @@ const TAU = Math.PI * 2;
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const SAVE_KEY = 'skygrapple_save_v1';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3();
-const HOOK_KINDS = ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp'];
-const ROPE_STYLE = { normal: [0x23262b, 0.03], grab: [0x1a1a1a, 0.055], light: [0xcfd3d8, 0.016], frost: [0x9fe0ff, 0.026], warp: [0x9b6bff, 0.014] };
+const HOOK_KINDS = ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp', 'wind', 'thunder'];
+const ROPE_STYLE = { normal: [0x23262b, 0.03], grab: [0x1a1a1a, 0.055], light: [0xcfd3d8, 0.016], frost: [0x9fe0ff, 0.026], warp: [0x9b6bff, 0.014], wind: [0xc8fff0, 0.018], thunder: [0xffe14a, 0.022] };
 
 function loadSave() {
   const def = { name: '', coins: 0, up: {}, abil: {}, quality: isTouch ? 'low' : 'high' };
@@ -166,7 +166,7 @@ class Game {
     this.gun.group.scale.setScalar(0.72);
     this.gunScene.add(this.gun.group);
     this.hookMeshes = {};
-    for (const [k, sc] of [['normal', 2.2], ['grabber', 3.4], ['lightrope', 1.6], ['boomerang', 4.2], ['frost', 2.4], ['warp', 3]]) {
+    for (const [k, sc] of [['normal', 2.2], ['grabber', 3.4], ['lightrope', 1.6], ['boomerang', 4.2], ['frost', 2.4], ['warp', 3], ['wind', 2.6], ['thunder', 2.4]]) {
       const m = makeHookHead(k); m.scale.setScalar(sc); m.visible = false;
       this.scene.add(m); this.hookMeshes[k] = m;
     }
@@ -971,15 +971,43 @@ class Game {
   }
   // FROST HOOK: an ice platform (max 4 per player, each melts after 30 s)
   icePlatform(p, at) {
+    const pf = p.has && p.has('permafrost');
     const mine = this.timedOps.filter((o) => o.ice && o.owner === p.id);
-    if (mine.length >= 4) { mine[0].t = 0; this.updateTimedOps(0); }
+    if (mine.length >= (pf ? 8 : 4)) { mine[0].t = 0; this.updateTimedOps(0); }
     const pid = this.sid + '-ice' + (this.iceN = (this.iceN || 0) + 1);
     this.edit({ o: 'place', pid, x: +at.x.toFixed(2), y: +(at.y - 0.3).toFixed(2), z: +at.z.toFixed(2), sx: 4.2, sy: 0.6, sz: 4.2, look: 'ice', color: 0x8fd3ff, surf: 0 });
-    this.timedOps.push({ t: 30, pids: [pid], at: at.clone(), ice: true, owner: p.id });
+    this.timedOps.push({ t: pf ? 60 : 30, pids: [pid], at: at.clone(), ice: true, owner: p.id });
     this.particles.burst(at, 0xdff6ff, 34, 8, 0.35);
     this.particles.burst(at, 0x9fe0ff, 16, 5, 0.3);
     this.sfx.near('parry', at);
     return true;
+  }
+  // THUNDER HOOK: lightning jumps from the one you hooked to up to n more enemies nearby
+  thunderChain(p, first, n, stun) {
+    const all = [];
+    for (const e of this.enemies) if (!e.dead) all.push(e);
+    for (const r of this.remotes.values()) if (!r.dead) all.push(r);
+    const hit = new Set([first.id]);
+    let cur = first, k = 0;
+    const from = new THREE.Vector3();
+    while (k < n) {
+      let best = null, bd = 16;
+      for (const e of all) { if (hit.has(e.id) || (e.kind === 'player' && inSafeZone(e.pos))) continue; const d = e.pos.distanceTo(cur.pos); if (d < bd) { bd = d; best = e; } }
+      if (!best) break;
+      hit.add(best.id);
+      from.copy(cur.pos); from.y += 0.8 * (cur.scale || 1);
+      const to = best.pos.clone(); to.y += 0.8 * (best.scale || 1);
+      this.addZap(from, to);
+      const dx = best.pos.x - cur.pos.x, dz = best.pos.z - cur.pos.z, l = Math.hypot(dx, dz) || 1;
+      this.deliverHit(best.id, { mode: 'bump', dmg: 20, k: 0.4, d: [dx / l, 0, dz / l], stun, attacker: p.id, aname: this.name });
+      this.particles.burst(to, 0xfff27a, 12, 7, 0.2);
+      cur = best; k++;
+    }
+    _x.copy(first.pos); _x.y += 0.8 * (first.scale || 1);
+    this.particles.burst(_x, 0xfff27a, 20, 8, 0.25); this.particles.burst(_x, 0x7fd0ff, 12, 6, 0.2);
+    this.sfx.near('zip', first.pos);
+    if (k) this.ui.toast(`⚡ Lightning jumped to ${k} more!`);
+    return k;
   }
   updateTimedOps(dt) {
     for (let i = this.timedOps.length - 1; i >= 0; i--) {
@@ -1437,7 +1465,7 @@ class Game {
 
   updateHud(dt) {
     const p = this.player, ui = this.ui;
-    ui.setHook(p.hook.state, this.hookKind(), p.held ? (p.held.parts ? 'struct' : true) : false);
+    ui.setHook(p.hook.state, this.hookKind(), p.held ? (p.held.parts ? 'struct' : true) : false, !p.onGround && !p.inWater, p.windN, p.warpCd > 0);
     this.hurtV = Math.max(0, this.hurtV - dt * 1.5);
     ui.hurt(this.hurtV + (p.hp < this.stats.health * 0.3 && !p.dead ? 0.15 + Math.sin(this.time * 5) * 0.08 : 0));
     // crosshair: does the aim hit something in range?
@@ -2378,6 +2406,67 @@ if (location.search.includes("autotest")) {
           clr9(); return r;
         });
         game.equipHook('normal', true); game.save.hooks = {}; game.save.gems = 0; game.save.passive = {};
+        // ================= round 10: Wind + Thunder hooks, air warp, hook passives
+        const r10 = {}; log.round10 = r10;
+        const T10 = (name, fn) => { try { r10[name] = fn(); } catch (err) { r10[name] = 'ERR ' + err.message + ' @' + (err.stack || '').split('\n')[1]; } };
+        const allHooks = { grabber: true, lightrope: true, boomerang: true, frost: true, warp: true, wind: true, thunder: true };
+        T10('defs', () => ({ hooks: HOOKS.map((H) => H.key), hookPassives: PASSIVES.filter((P) => P.hook).map((P) => P.hook + ':' + P.key), everyHookHasPassive: HOOKS.every((H) => PASSIVES.some((P) => P.hook === H.key)) }));
+        T10('passiveShop', () => { game.shopMode = 'passive'; game.ui.renderShop(); const n = document.querySelectorAll('#shopList .hookpass').length; game.shopMode = 'normal'; return n; });
+        T10('wind', () => {
+          clr9(); game.save.hooks = allHooks; game.save.passive = {};
+          // jump height: normal vs wind
+          const jump = (k) => { game.equipHook(k, true); reset(); const y0 = p.pos.y; p.vel.y = 9.5; p.onGround = false; let top = y0; for (let i = 0; i < 150; i++) { sim(1 / 60); top = Math.max(top, p.pos.y); } return +(top - y0).toFixed(2); };
+          const r = { jumpNormal: jump('normal'), jumpWind: jump('wind') };
+          // air dashes
+          reset(); p.vel.set(0, 12, 0); p.onGround = false; sim(0.2); p.yaw = 0.5; p.pitch = 0; const n0 = p.windN; p.shoot(); r.dashSpeed = Math.round(Math.hypot(p.vel.x, p.vel.z)); p.shoot(); p.shoot(); r.charges = [n0, p.windN]; r.hookStayedIdle = p.hook.state === HOOK.IDLE;
+          sim(3); r.rechargedOnLanding = p.windN;
+          // swap attack on an enemy
+          reset(); const e = mk9(clearOff(16), 'grappler'); const ep = e.pos.clone(), pp = p.pos.clone(); const tc = e.pos.clone(); tc.y += 1; aim(tc); p.shoot(); sim(0.4);
+          r.swap = { enemyMovedToMySpot: +e.pos.distanceTo(pp).toFixed(1), iMovedToward: +p.pos.distanceTo(ep).toFixed(1), dmg: 60 - e.hp };
+          // still grapples walls
+          clr9(); reset(); p.pitch = -0.4; sim(1 / 60); p.shoot(); sim(0.6); r.wallAttach = p.hook.state === HOOK.ATTACHED;
+          p.cancel(); sim(0.5);
+          // tailwind: 3 charges + gust
+          game.save.passive = { tailwind: true }; reset(); const e2 = mk9(clearOff(4), 'grappler'); p.vel.set(0, 12, 0); p.onGround = false; sim(0.15); p.shoot(); sim(0.05); r.tailwind = { gustDmg: 60 - e2.hp, max: (() => { reset(); return p.windN; })() };
+          game.save.passive = {}; clr9(); return r;
+        });
+        T10('thunder', () => {
+          clr9(); game.save.hooks = allHooks; game.equipHook('thunder', true); reset();
+          const o = clearOff(15); const e1 = mk9(o, 'grappler');
+          const side = new THREE.Vector3(-o.z, 0, o.x).normalize();
+          const e2 = mk9(o.clone().addScaledVector(side, 4), 'grappler'), e3 = mk9(o.clone().addScaledVector(side, -4), 'grappler'), e4 = mk9(o.clone().multiplyScalar(1.4), 'grappler');
+          const tc = e1.pos.clone(); tc.y += 1; aim(tc); p.shoot(); sim(0.3);
+          const r = { latched: p.hook.state === HOOK.LATCHED, dmg: [e1, e2, e3, e4].map((e) => 60 - e.hp), stunned: [e2, e3, e4].filter((e) => e.stunT > 0).length };
+          p.cancel(); sim(0.4); clr9(); return r;
+        });
+        T10('airWarp', () => {
+          clr9(); game.save.hooks = allHooks; game.equipHook('warp', true); reset();
+          p.vel.set(0, 12, 0); p.onGround = false; sim(0.25); p.pitch = 0.2; const a = p.pos.clone(); p.shoot();
+          const r = { instant: +p.pos.distanceTo(a).toFixed(1), state: p.hook.state, cd: +p.warpCd.toFixed(1) };
+          sim(1.1); game.save.passive = { warpblast: true }; const e = mk9(clearOff(3), 'grappler'); p.vel.set(0, 12, 0); p.onGround = false; sim(0.2); p.pitch = 0.1; p.yaw += Math.PI; p.shoot();
+          r.warpBlast = { dmg: 60 - e.hp, cd: +p.warpCd.toFixed(1) };
+          game.save.passive = {}; clr9(); return r;
+        });
+        T10('passives', () => {
+          clr9(); game.save.hooks = allHooks; const P = {};
+          // Hook Master
+          game.equipHook('normal', true); game.save.passive = { hookmaster: true }; reset(); let e = mk9(clearOff(15), 'brute'); let tc = e.pos.clone(); tc.y += 1.2; aim(tc); p.shoot(); sim(0.3); P.hookmasterDmg = 160 - e.hp; p.cancel(); sim(0.4); clr9();
+          // Leech Rope
+          game.equipHook('lightrope', true); game.save.passive = { leechrope: true }; reset(); p.hp = 50; e = mk9(clearOff(12), 'brute'); tc = e.pos.clone(); tc.y += 1.2; aim(tc); p.shoot(); sim(0.3); const hp1 = e.hp, ph = p.hp; sim(2); P.leech = { drained: Math.round(hp1 - e.hp), healed: Math.round(p.hp - ph) }; p.cancel(); sim(0.4); clr9();
+          // Razor Boomerang
+          game.equipHook('boomerang', true); game.save.passive = { razorang: true }; reset(); e = mk9(clearOff(12), 'brute'); tc = e.pos.clone(); tc.y += 1.2; aim(tc); p.shoot(); for (let i = 0; i < 360 && p.hook.state !== HOOK.IDLE; i++) sim(1 / 60); P.razorDmg = 160 - e.hp; clr9();
+          // Permafrost
+          game.equipHook('frost', true); game.save.passive = { permafrost: true }; reset(); e = mk9(clearOff(14), 'grappler'); tc = e.pos.clone(); tc.y += 1; aim(tc); p.shoot(); sim(0.3); P.permafrostFreeze = +e.frozenT.toFixed(1); p.cancel(); sim(0.4); clr9();
+          for (let i = 0; i < 9; i++) { p.hook.state = HOOK.FLYING; p.hook.kind = 'frost'; p.hook.pos.set(p.pos.x + i * 6, p.pos.y + 25, p.pos.z); p.freezeHook(); }
+          P.permafrostPlatforms = W9.placed.filter((b) => b.look === 'ice').length; P.iceLife = Math.max(...game.timedOps.map((o) => o.t)); p.hook.state = HOOK.IDLE;
+          // Storm Caller
+          game.equipHook('thunder', true); game.save.passive = { stormcaller: true }; clr9(); reset();
+          const es = []; const o = clearOff(14); for (let i = 0; i < 7; i++) es.push(mk9(o.clone().add(new THREE.Vector3(Math.sin(i) * 3, 0, Math.cos(i) * 3)).setY(0), 'grappler'));
+          tc = es[0].pos.clone(); tc.y += 1; aim(tc); p.shoot(); sim(0.3); P.stormHit = es.filter((x) => x.hp < 60).length; P.stormStun = +Math.max(...es.slice(1).map((x) => x.stunT)).toFixed(1); p.cancel(); sim(0.4);
+          game.save.passive = {}; clr9(); return P;
+        });
+        T10('icons', () => { const b = document.querySelector('#abilities .ab'); const rr = document.querySelector('#rareAbilities .ab'); return { main: b ? b.offsetWidth : null, rare: rr ? rr.offsetWidth : null }; });
+        game.equipHook('normal', true); game.save.hooks = {}; game.save.passive = {};
         // music: render 6 s offline and measure it
         try {
           const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;

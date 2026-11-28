@@ -74,15 +74,15 @@ export class UI {
     if (v && this.g.input && this.g.input.resetTouch) this.g.input.resetTouch();
   }
 
-  setHook(st, kind = 'normal', held = false) {
-    const key = st + kind + held;
+  setHook(st, kind = 'normal', held = false, air = false, windN = 0, warpCd = false) {
+    const key = st + kind + held + air + windN + warpCd;
     if (key === this._hs) return;
     this._hs = key;
     const b = $('btnShoot');
     const pull = st === 2 || st === 3;
     const light = kind === 'lightrope', grab = kind === 'grabber';
     const live = st === 1 && (kind === 'frost' || kind === 'boomerang'); // a second tap does something while it flies
-    b.textContent = held ? 'THROW' : pull ? (st === 3 ? 'YANK' : 'PULL') : live ? (kind === 'frost' ? 'ICE' : 'CALL') : st === 1 || st === 4 ? '• • •' : grab ? 'GRAB' : kind === 'boomerang' ? 'THROW' : kind === 'warp' ? 'WARP' : 'SHOOT';
+    b.textContent = held ? 'THROW' : pull ? (st === 3 ? 'YANK' : 'PULL') : live ? (kind === 'frost' ? 'ICE' : 'CALL') : st === 1 || st === 4 ? '• • •' : grab ? 'GRAB' : kind === 'boomerang' ? 'THROW' : kind === 'warp' ? 'WARP' : kind === 'wind' && air ? 'DASH' : 'SHOOT';
     b.classList.toggle('pull', pull || held || live);
     b.classList.toggle('busy', !held && !live && (st === 1 || st === 4));
     $('btnCancel').classList.toggle('hidden', !(st === 1 || pull || held));
@@ -90,6 +90,8 @@ export class UI {
     let tip = ['', 'Hook flying…', T ? 'Hooked! Tap PULL to launch · ✕ to cancel' : 'Hooked! Click to PULL · Right-click / Q to cancel', T ? 'Got one! Tap YANK to pull them in' : 'Got one! Click to YANK them · Q to let go', ''][st] || '';
     if (light && st === 2) tip = T ? '🪢 Swinging on the rope · PULL to zoom in · ✕ lets go' : '🪢 Swing on the rope! Click to PULL yourself in · Q lets go';
     if (light && st === 3) tip = T ? '🪢 Tied up! YANK to drag them in · ✕ lets go' : '🪢 They\'re tied to you! Click to YANK · Q lets go';
+    if (kind === 'wind' && st === 0) tip = air ? `🌬️ Tap for a WIND DASH (${windN} left)` : '🌬️ Low gravity · in the air, tap to wind dash · hits are swap attacks';
+    if (kind === 'warp' && st === 0 && air) tip = warpCd ? '🌀 Warp recharging…' : '🌀 Tap to WARP to where you aim';
     if (kind === 'boomerang' && st === 1) tip = T ? '🪃 Boomerang out! Tap CALL to bring it back' : '🪃 Boomerang out! Click to call it back early';
     if (kind === 'frost' && st === 1) tip = T ? '❄️ Tap ICE to freeze a platform right there' : '❄️ Click again to freeze an ICE PLATFORM right there';
     const what = held === 'struct' ? '🏗️ Holding a whole building' : '🟨 Holding a chunk';
@@ -297,7 +299,9 @@ export class UI {
         const owned = !!(g.save.passive || {})[P.key];
         const row = document.createElement('div');
         row.className = 'upg passive';
-        row.innerHTML = `<div class="uinfo"><div class="un">${P.icon} ${P.name}</div><div class="ud">${P.desc}</div></div>`;
+        const HK = P.hook && HOOK_DEF[P.hook];
+        row.className = 'upg passive' + (HK ? ' hookpass hk-' + P.hook : '');
+        row.innerHTML = `<div class="uinfo"><div class="un">${P.icon} ${P.name}${HK ? ` <span class="pips">for ${HK.icon} ${HK.name}</span>` : ''}</div><div class="ud">${P.desc}</div></div>`;
         const b = document.createElement('button');
         b.textContent = owned ? '✓ OWNED' : `🪙 ${P.cost}`;
         b.disabled = owned || g.save.coins < P.cost;

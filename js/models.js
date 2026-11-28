@@ -30,6 +30,9 @@ const inkMat = new THREE.MeshStandardMaterial({ color: 0x141416, metalness: 0.6,
 const orangeMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.45, metalness: 0.2 });
 const iceMat = new THREE.MeshStandardMaterial({ color: 0xbfeaff, emissive: 0x2a8fd0, emissiveIntensity: 0.55, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.9 });
 const purpleMat = new THREE.MeshStandardMaterial({ color: 0x7a3cff, emissive: 0x4a1aa0, emissiveIntensity: 0.6, metalness: 0.6, roughness: 0.3 });
+const windMat = new THREE.MeshStandardMaterial({ color: 0xe9fffa, emissive: 0x2fc9a8, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.2 });
+const boltMat = new THREE.MeshStandardMaterial({ color: 0xffe14a, emissive: 0xffb000, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 });
+const sparkMat = new THREE.MeshStandardMaterial({ color: 0x7fd0ff, emissive: 0x2a8fff, emissiveIntensity: 1.2, roughness: 0.2 });
 const portalMat = new THREE.MeshBasicMaterial({ color: 0x5ff2ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
 let blobTex = null;
 function blobTexture() {
@@ -58,6 +61,7 @@ const GG = {
   wRing: new THREE.TorusGeometry(0.075, 0.018, 10, 28),
   wDisc: new THREE.CircleGeometry(0.062, 24),
   fCrystal: new THREE.OctahedronGeometry(0.06, 0),
+  wTorus: new THREE.TorusGeometry(0.05, 0.012, 8, 20),
 };
 const ropeGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true).translate(0, 0.5, 0);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -141,6 +145,27 @@ export function makeHookHead(variant = 'normal') {
     const nub = new THREE.Mesh(GG.collar, purpleMat); nub.scale.set(0.6, 1, 0.6); nub.rotation.x = Math.PI / 2; nub.position.z = 0.04; h.add(nub);
     return h;
   }
+  if (variant === 'wind') {
+    // a fan of three curved blades around a swirl ring
+    const ring = new THREE.Mesh(GG.wTorus, windMat); h.add(ring);
+    for (let i = 0; i < 3; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = (i / 3) * TAU; h.add(arm);
+      const b = new THREE.Mesh(boxGeo, i ? windMat : sparkMat); b.scale.set(0.05, 0.11, 0.012); b.position.set(0.03, 0.07, -0.02); b.rotation.set(-0.4, 0, 0.5); arm.add(b);
+    }
+    const nose = new THREE.Mesh(GG.lCone, windMat); nose.rotation.x = -Math.PI / 2; nose.position.z = -0.06; h.add(nose);
+    return h;
+  }
+  if (variant === 'thunder') {
+    // a zig-zag bolt with electric prongs
+    const parts = [[0.02, 0.04, 0.3], [-0.02, -0.01, -0.3], [0.015, -0.06, 0.3]];
+    parts.forEach(([x, y, r], i) => { const s = new THREE.Mesh(boxGeo, boltMat); s.scale.set(0.03, 0.07, 0.03); s.position.set(x, y, -0.03 - i * 0.03); s.rotation.z = r; h.add(s); });
+    const tip = new THREE.Mesh(GG.cone, boltMat); tip.rotation.x = -Math.PI / 2; tip.position.z = -0.1; tip.scale.setScalar(0.8); h.add(tip);
+    for (let i = 0; i < 3; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = (i / 3) * TAU; h.add(arm);
+      const p = new THREE.Mesh(boxGeo, sparkMat); p.scale.set(0.014, 0.014, 0.1); p.position.set(0, 0.04, 0.02); p.rotation.x = -0.7; arm.add(p);
+    }
+    return h;
+  }
   if (variant === 'lightrope') {
     const core = new THREE.Mesh(GG.lCone, greyMat); core.rotation.x = -Math.PI / 2; core.position.z = -0.04; h.add(core);
     for (let i = 0; i < 3; i++) {
@@ -199,7 +224,7 @@ export function makeGun(withHand) {
   tank.position.set(0.078, 0.03, 0.02);
   g.add(tank);
   const heads = {};
-  for (const k of ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp']) heads[k] = makeHookHead(k);
+  for (const k of ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp', 'wind', 'thunder']) heads[k] = makeHookHead(k);
   for (const k in heads) { heads[k].position.z = -0.38; heads[k].visible = k === 'normal'; g.add(heads[k]); }
   heads.grabber.scale.setScalar(1.5);
   const head = heads.normal;
@@ -207,7 +232,7 @@ export function makeGun(withHand) {
   const sleeve = new THREE.Mesh(GG.sleeve, stripeMat); sleeve.rotation.x = Math.PI / 2; sleeve.visible = false; g.add(sleeve);
   const spool2 = new THREE.Mesh(GG.lSpool, greyMat); spool2.rotation.z = Math.PI / 2; spool2.position.set(0, 0.1, 0.04); spool2.visible = false; g.add(spool2);
   // coloured rings for the other hooks
-  const skinRing = { boomerang: orangeMat, frost: iceMat, warp: purpleMat };
+  const skinRing = { boomerang: orangeMat, frost: iceMat, warp: purpleMat, wind: windMat, thunder: boltMat };
   const rings = [r1, r2], ringMat = r1.material;
   const muzzle = new THREE.Object3D();
   muzzle.position.z = -0.38;

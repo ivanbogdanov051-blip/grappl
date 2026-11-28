@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makeCharacter, makeHookHead, Rope } from './models.js';
-const HOOK_KINDS = ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp'];
-const HOOK_STYLE = { normal: [0x1d4d24, 0.035, 2.2], grabber: [0x1a1a1a, 0.06, 3.4], lightrope: [0xc9ccd0, 0.02, 1.6], boomerang: [0xff7a1a, 0.02, 4.2], frost: [0x9fe0ff, 0.03, 2.4], warp: [0x9b6bff, 0.016, 3] };
+const HOOK_KINDS = ['normal', 'grabber', 'lightrope', 'boomerang', 'frost', 'warp', 'wind', 'thunder'];
+const HOOK_STYLE = { normal: [0x1d4d24, 0.035, 2.2], grabber: [0x1a1a1a, 0.06, 3.4], lightrope: [0xc9ccd0, 0.02, 1.6], boomerang: [0xff7a1a, 0.02, 4.2], frost: [0x9fe0ff, 0.03, 2.4], warp: [0x9b6bff, 0.016, 3], wind: [0xc8fff0, 0.02, 2.6], thunder: [0xffe14a, 0.024, 2.4] };
 import { lerpAngle } from './noise.js';
 import { ENEMY_TYPES } from './enemytypes.js';
 
